@@ -370,13 +370,9 @@
       localAppState = null;
     }
     const rejectStaleWipe = localAppState && payload.state
-      && (
-        (Number(localAppState.wipedAtMs || 0) > 0
-          && Number(localAppState.wipedAtMs || 0) > Number(payload.state.wipedAtMs || 0))
-        || (Number(localStorage.getItem("family-counter-cloud-wipe-at") || 0) > 0
-          && Number(localStorage.getItem("family-counter-cloud-wipe-at") || 0)
-            > Number(payload.state.wipedAtMs || 0))
-      );
+      && (window.FamilySync?.shouldRejectStaleRemote
+        ? window.FamilySync.shouldRejectStaleRemote(localAppState, payload.state)
+        : false);
 
     const shouldApplyState = payload.type === "state"
       && payload.state
@@ -623,14 +619,25 @@
     return true;
   }
 
+  function clearStalePendingBotLock() {
+    const pendingRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
+    if (!pendingRev) return;
+    const pendingAt = Number(localStorage.getItem(PENDING_BOT_AT_KEY) || 0);
+    const ageMs = pendingAt ? Date.now() - pendingAt : Infinity;
+    if (ageMs > 90000) {
+      localStorage.removeItem(PENDING_BOT_REVISION_KEY);
+      localStorage.removeItem(PENDING_BOT_AT_KEY);
+      stopPendingBotPoll();
+    }
+  }
+
   function push(localState, pushOptions) {
     if (!isSyncReady()) {
       const reason = getSyncBlockedReason();
       if (reason) updateSyncStatus("local", reason);
       return;
     }
-    const pendingBotRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
-    if (pendingBotRev > 0) return;
+    clearStalePendingBotLock();
     clearTimeout(pushTimer);
     pendingPushOptions = pushOptions || null;
     pushTimer = setTimeout(() => {
@@ -662,11 +669,12 @@
       updateSyncStatus("local", reason);
       return Promise.reject(new Error(reason));
     }
-    const pendingBotRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
-    if (pendingBotRev > 0) return Promise.resolve();
+    clearStalePendingBotLock();
     cancelPendingPush();
     updateSyncStatus("online", "Отправка…");
-    return pushToTelegram(localState, null, pushOptions || {}).catch((error) => {
+    return pushToTelegram(localState, null, pushOptions || {}).then(() => {
+      updateSyncStatus("synced", "Данные в канале");
+    }).catch((error) => {
       console.warn("tg push immediate", error);
       const msg = error?.message || "ошибка";
       updateSyncStatus("offline", `Telegram: ${msg}`);
