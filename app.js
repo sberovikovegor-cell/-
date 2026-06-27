@@ -10,15 +10,34 @@ const LOCAL_PUSH_REVISION_KEY = "family-counter-local-push-revision";
 const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "59";
-const QUICK_AMOUNTS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
-const TYPE_LABELS = {
-  income: "Пополнение",
-  purchase: "Покупка",
-  transfer: "Перевод",
-};
+const APP_BUILD = "60";
 
-let state = loadState();
+function showBootError(message) {
+  const banner = document.querySelector("#syncAlertBanner");
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = `Ошибка: ${message}`;
+  }
+}
+
+window.addEventListener("error", (event) => {
+  console.error(event.error || event.message);
+  showBootError(event.message || "ошибка загрузки");
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  console.error(event.reason);
+  showBootError(String(event.reason?.message || event.reason || "ошибка"));
+});
+
+let state;
+try {
+  state = loadState();
+} catch (error) {
+  console.error("loadState failed", error);
+  showBootError(error?.message || String(error));
+  state = getDefaultState();
+}
 let editingPersonId = null;
 let currentOperation = null;
 let amountChangeStack = [];
@@ -116,23 +135,12 @@ const elements = {
 
 init();
 
-function showBootError(message) {
-  const banner = document.querySelector("#syncAlertBanner");
-  if (banner) {
-    banner.hidden = false;
-    banner.textContent = `Ошибка: ${message}`;
-  }
-}
-
-window.addEventListener("error", (event) => {
-  console.error(event.error || event.message);
-  showBootError(event.message || "ошибка загрузки");
-});
-
-window.addEventListener("unhandledrejection", (event) => {
-  console.error(event.reason);
-  showBootError(String(event.reason?.message || event.reason || "ошибка"));
-});
+const QUICK_AMOUNTS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
+const TYPE_LABELS = {
+  income: "Пополнение",
+  purchase: "Покупка",
+  transfer: "Перевод",
+};
 
 function init() {
   try {
@@ -258,7 +266,11 @@ function initFamilySync() {
       ? "Введите код семьи (кнопка ниже)"
       : "ПК не настроен");
   } else {
-    openSyncDialog();
+    FamilySync.updateSyncStatus("local", "Введите код семьи (кнопка ниже)");
+    // На APK showModal при старте часто ломает WebView — только в браузере
+    if (window.location.protocol !== "file:") {
+      setTimeout(() => openSyncDialog(), 400);
+    }
   }
 }
 
@@ -579,6 +591,10 @@ function bindSyncDialogOpen() {
 }
 
 function bindEvents() {
+  if (!elements.addPersonButton) {
+    showBootError("Не загрузился интерфейс (index.html)");
+    return;
+  }
   elements.addPersonButton.addEventListener("click", () => openPersonDialog());
   elements.detailsToggleButton.addEventListener("click", toggleDetailsView);
   elements.historyToggleButton.addEventListener("click", toggleHistoryView);
