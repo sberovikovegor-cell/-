@@ -597,6 +597,20 @@ dialog {
   color: #ffb4b4;
 }
 
+.sync-danger-zone {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.danger-text {
+  color: #ff8a8a;
+  border-color: rgba(255, 138, 138, 0.45);
+}
+
 .sync-alert-banner {
   position: sticky;
   top: 0;
