@@ -17,6 +17,12 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -45,6 +51,7 @@ button {
 
 .app {
   width: min(100%, 760px);
+  max-width: 100%;
   margin: 0 auto;
   padding: 18px;
   padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
@@ -458,8 +465,9 @@ dialog {
 .person-head-row {
   display: flex;
   align-items: flex-start;
-  gap: 32px;
+  gap: 8px;
   width: 100%;
+  max-width: 100%;
 }
 
 .person-line-head {
@@ -643,7 +651,8 @@ dialog {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-  width: 9.2rem;
+  width: auto;
+  max-width: 42%;
 }
 
 .person-line {
@@ -749,6 +758,7 @@ dialog {
 .folder-list,
 .folder-picker {
   flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .folder-chip,
