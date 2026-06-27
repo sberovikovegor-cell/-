@@ -362,15 +362,27 @@
       && remoteVersion > 0
       && remoteVersion < localPushRev;
 
+    let localAppState = null;
+    try {
+      const raw = localStorage.getItem("family-counter-v1");
+      if (raw) localAppState = JSON.parse(raw);
+    } catch {
+      localAppState = null;
+    }
+    const rejectStaleWipe = localAppState && payload.state
+      && Number(localAppState.wipedAtMs || 0) > 0
+      && Number(localAppState.wipedAtMs || 0) > Number(payload.state.wipedAtMs || 0);
+
     const shouldApplyState = payload.type === "state"
       && payload.state
       && onRemoteUpdate
-      && !staleWhileBotPending;
+      && !staleWhileBotPending
+      && !rejectStaleWipe;
 
     if (shouldApplyState) {
       onRemoteUpdate(payload.state, remoteVersion);
     }
-    if (remoteVersion >= localVersion) {
+    if (remoteVersion >= localVersion && !rejectStaleWipe) {
       localStorage.setItem(LOCAL_VERSION_KEY, String(remoteVersion));
       if (remoteVersion >= localPushRev && localPushRev > 0) {
         localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
@@ -443,11 +455,18 @@
 
     let stateToPush = localState;
     const replaceRemote = Boolean(pushOptions.replaceRemote);
+    const localWipe = Number(localState?.wipedAtMs || 0);
     if (!botExport && !replaceRemote && localState && window.FamilyMerge?.mergeStates) {
       try {
         const remote = await downloadPinnedState();
         if (remote?.payload?.type === "state" && remote.payload.state) {
-          stateToPush = window.FamilyMerge.mergeStates(localState, remote.payload.state);
+          const remoteState = remote.payload.state;
+          const remoteWipe = Number(remoteState?.wipedAtMs || 0);
+          if (localWipe > 0 && localWipe > remoteWipe) {
+            stateToPush = localState;
+          } else {
+            stateToPush = window.FamilyMerge.mergeStates(localState, remoteState);
+          }
         }
       } catch (error) {
         console.warn("merge before push", error);
