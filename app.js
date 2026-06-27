@@ -10,14 +10,21 @@ const LOCAL_PUSH_REVISION_KEY = "family-counter-local-push-revision";
 const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "60";
+const APP_BUILD = "61";
 
 function showBootError(message) {
+  const text = String(message || "ошибка");
+  if (window.__bootLog) window.__bootLog(text);
   const banner = document.querySelector("#syncAlertBanner");
   if (banner) {
     banner.hidden = false;
-    banner.textContent = `Ошибка: ${message}`;
+    banner.textContent = `Ошибка: ${text}`;
   }
+}
+
+function hideBootScreen() {
+  const screen = document.querySelector("#bootErrorScreen");
+  if (screen) screen.classList.add("boot-error-screen--hidden");
 }
 
 window.addEventListener("error", (event) => {
@@ -155,6 +162,7 @@ function init() {
     }
     render();
     registerServiceWorker();
+    hideBootScreen();
   } catch (error) {
     console.error(error);
     showBootError(error?.message || String(error));
