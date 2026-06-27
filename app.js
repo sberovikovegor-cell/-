@@ -12,7 +12,7 @@ const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "71";
+const APP_BUILD = "73";
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -241,6 +241,8 @@ function setupSyncDialogMode() {
 function initFamilySync() {
   if (!window.FamilySync) return;
 
+  FamilySync.shouldRejectStaleRemote = shouldRejectStaleRemoteState;
+
   FamilySync.onLocalStateMerged = (mergedState) => {
     const localBefore = applyDeletedPersonFilter(normalizeLoadedState(state));
     const normalizedRemote = applyDeletedPersonFilter(
@@ -374,6 +376,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
       localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
     }
   }
+  reconcileFiltersAfterSync();
   render();
 }
 
@@ -844,16 +847,43 @@ function shouldReplaceWithRemoteWipe(localState, remoteState) {
   return remoteWipe > 0 && remoteWipe >= localWipe;
 }
 
+function countActivePeople(appState) {
+  const deleted = getDeletedPersonIdsFrom(appState);
+  return (appState?.people || []).filter((person) => !deleted.has(person.id)).length;
+}
+
 function shouldRejectStaleRemoteState(localState, remoteState) {
   const localWipe = Number(localState?.wipedAtMs || 0);
   const remoteWipe = Number(remoteState?.wipedAtMs || 0);
   const cloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
-  if (localWipe > 0 && localWipe > remoteWipe) return true;
-  if (cloudWipe > 0 && cloudWipe > remoteWipe) return true;
-  const localCount = (localState?.people || []).length;
-  const remoteCount = (remoteState?.people || []).length;
-  if (remoteCount > localCount + 2 && localWipe >= remoteWipe) return true;
+  const effectiveLocalWipe = Math.max(localWipe, cloudWipe);
+  const localCount = countActivePeople(localState);
+  const remoteCount = countActivePeople(remoteState);
+
+  if (remoteWipe > 0 && remoteWipe >= effectiveLocalWipe) return false;
+
+  if (effectiveLocalWipe > 0 && remoteWipe < effectiveLocalWipe) {
+    if (remoteCount > localCount + 2) return true;
+    if (remoteCount > localCount + 1 && remoteWipe === 0) return true;
+    return false;
+  }
+
+  if (remoteCount > localCount + 2 && effectiveLocalWipe >= remoteWipe && remoteWipe > 0) {
+    return true;
+  }
   return false;
+}
+
+function reconcileFiltersAfterSync() {
+  if (!state.people.length) return;
+  const visible = getVisiblePeople();
+  if (visible.length >= state.people.length) return;
+  state.activeFolderIds = [];
+  state.activeFirstNames = [...new Set(
+    state.people.map((person) => getPersonFirstName(person)).filter(Boolean),
+  )];
+  state.uiUpdatedAt = Date.now();
+  filtersAutoCleared = true;
 }
 
 function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
@@ -874,6 +904,7 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
     localStorage.setItem("family-counter-local-version", String(remoteVersion));
     localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
   }
+  reconcileFiltersAfterSync();
   render();
 }
 
@@ -1202,8 +1233,16 @@ function saveState(options = {}) {
   const json = JSON.stringify(state);
   localStorage.setItem(STORAGE_KEY, json);
   localStorage.setItem(STORAGE_BACKUP_KEY, json);
-  if (!options.skipPush && window.FamilySync?.push) {
-    FamilySync.push(state);
+  if (options.skipPush || !window.FamilySync) return;
+  const pushOptions = options.replaceRemote ? { replaceRemote: true } : null;
+  if (options.immediatePush && FamilySync.pushImmediate) {
+    FamilySync.pushImmediate(state, pushOptions).catch((error) => {
+      console.warn("sync push immediate", error);
+    });
+    return;
+  }
+  if (FamilySync.push) {
+    FamilySync.push(state, pushOptions);
   }
 }
 
@@ -1925,7 +1964,7 @@ function savePerson(event) {
     : state.people[state.people.length - 1];
   activateFiltersForPerson(savedPerson, { isNew: !editingPersonId });
 
-  saveState();
+  saveState({ immediatePush: true });
   elements.personDialog.close();
   render();
 
@@ -2180,7 +2219,7 @@ function confirmOperation(event) {
     deviceId: getDeviceId(),
   });
 
-  saveState();
+  saveState({ immediatePush: true });
   currentOperation = null;
   elements.operationDialog.close();
   render();
