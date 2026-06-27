@@ -16,6 +16,7 @@
   let pendingPollTimer = null;
   let pendingPollTimeout = null;
   let pushTimer = null;
+  let pendingPushOptions = null;
   let onRemoteUpdate = null;
   let onBotExportRemote = null;
   let onOnlineCallback = null;
@@ -436,12 +437,13 @@
     });
   }
 
-  async function pushToTelegram(localState, botExport) {
+  async function pushToTelegram(localState, botExport, pushOptions = {}) {
     const code = getFamilyCode();
     const revision = Date.now();
 
     let stateToPush = localState;
-    if (!botExport && localState && window.FamilyMerge?.mergeStates) {
+    const replaceRemote = Boolean(pushOptions.replaceRemote);
+    if (!botExport && !replaceRemote && localState && window.FamilyMerge?.mergeStates) {
       try {
         const remote = await downloadPinnedState();
         if (remote?.payload?.type === "state" && remote.payload.state) {
@@ -595,7 +597,7 @@
     return true;
   }
 
-  function push(localState) {
+  function push(localState, pushOptions) {
     if (!isSyncReady()) {
       const reason = getSyncBlockedReason();
       if (reason) updateSyncStatus("local", reason);
@@ -604,6 +606,7 @@
     const pendingBotRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
     if (pendingBotRev > 0) return;
     clearTimeout(pushTimer);
+    pendingPushOptions = pushOptions || null;
     pushTimer = setTimeout(() => {
       runPush(localState);
     }, 600);
@@ -615,8 +618,10 @@
       updateSyncStatus("offline", "Офлайн");
       return;
     }
+    const pushOptions = pendingPushOptions;
+    pendingPushOptions = null;
     updateSyncStatus("online", "Отправка…");
-    pushToTelegram(localState, null).then(() => {
+    pushToTelegram(localState, null, pushOptions).then(() => {
       updateSyncStatus("synced", "Синхронизировано");
     }).catch((error) => {
       console.warn("tg push", error);
@@ -625,7 +630,7 @@
     });
   }
 
-  function pushImmediate(localState) {
+  function pushImmediate(localState, pushOptions) {
     if (!isSyncReady()) {
       const reason = getSyncBlockedReason() || "Синхронизация не готова";
       updateSyncStatus("local", reason);
@@ -635,7 +640,7 @@
     if (pendingBotRev > 0) return Promise.resolve();
     cancelPendingPush();
     updateSyncStatus("online", "Отправка…");
-    return pushToTelegram(localState, null).catch((error) => {
+    return pushToTelegram(localState, null, pushOptions || {}).catch((error) => {
       console.warn("tg push immediate", error);
       const msg = error?.message || "ошибка";
       updateSyncStatus("offline", `Telegram: ${msg}`);
