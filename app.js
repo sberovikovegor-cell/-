@@ -8,9 +8,17 @@ const PENDING_BOT_AT_KEY = "family-counter-pending-bot-at";
 const LAST_BOT_APPLY_KEY = "family-counter-last-bot-apply";
 const LOCAL_PUSH_REVISION_KEY = "family-counter-local-push-revision";
 const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
+const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "62";
+const APP_BUILD = "65";
+
+function blurActiveInput() {
+  const active = document.activeElement;
+  if (active && active !== document.body && typeof active.blur === "function") {
+    active.blur();
+  }
+}
 const QUICK_AMOUNTS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
 const TYPE_LABELS = {
   income: "Пополнение",
@@ -78,6 +86,8 @@ const elements = {
   serverUrlInput: document.querySelector("#serverUrlInput"),
   familyCodeInput: document.querySelector("#familyCodeInput"),
   createFamilyCodeButton: document.querySelector("#createFamilyCodeButton"),
+  clearLocalDataButton: document.querySelector("#clearLocalDataButton"),
+  clearCloudDataButton: document.querySelector("#clearCloudDataButton"),
   cancelSyncButton: document.querySelector("#cancelSyncButton"),
   familyTotal: document.querySelector("#familyTotal"),
   familyPurchaseTotal: document.querySelector("#familyPurchaseTotal"),
@@ -239,7 +249,9 @@ function initFamilySync() {
     state = applyDeletedPersonFilter(state);
     state = preferLocalFiltersWhenShrunk(localBefore, normalizedRemote, state);
     state = scrubFiltersToPeople(state);
+    state = applyDeletedFolderFilter(state);
     reconcileDeletedPersonIds(normalizedRemote);
+    reconcileDeletedFolderIds(normalizedRemote);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
     render();
@@ -316,10 +328,13 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = applyDeletedPersonFilter(state);
   state = preferLocalFiltersWhenShrunk(localBefore, normalizedRemote, state);
   state = scrubFiltersToPeople(state);
+  state = applyDeletedFolderFilter(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
+  state.deletedFolderIds = [...getDeletedFolderIds()];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
   reconcileDeletedPersonIds(normalizedRemote);
+  reconcileDeletedFolderIds(normalizedRemote);
   if (remoteVersion > 0) {
     const localVersion = Number(localStorage.getItem("family-counter-local-version") || 0);
     if (remoteVersion >= localVersion) {
@@ -367,6 +382,74 @@ function reconcileDeletedPersonIds(remoteState) {
   localStorage.setItem(DELETED_PERSON_IDS_KEY, JSON.stringify(state.deletedPersonIds));
 }
 
+function getDeletedFolderIdsFrom(appState) {
+  const merged = new Set();
+  (appState?.deletedFolderIds || []).forEach((id) => merged.add(id));
+  try {
+    const raw = localStorage.getItem(DELETED_FOLDER_IDS_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(ids)) ids.filter(Boolean).forEach((id) => merged.add(id));
+  } catch {
+    // ignore broken tombstone storage
+  }
+  return merged;
+}
+
+function getDeletedFolderIds() {
+  return getDeletedFolderIdsFrom(state);
+}
+
+function addDeletedFolderId(folderId) {
+  if (!folderId) return;
+  const deleted = getDeletedFolderIds();
+  deleted.add(folderId);
+  state.deletedFolderIds = [...deleted];
+  localStorage.setItem(DELETED_FOLDER_IDS_KEY, JSON.stringify(state.deletedFolderIds));
+}
+
+function reconcileDeletedFolderIds(remoteState) {
+  const remoteDeleted = remoteState?.deletedFolderIds || [];
+  if (!remoteDeleted.length) return;
+  const deleted = getDeletedFolderIds();
+  remoteDeleted.forEach((id) => deleted.add(id));
+  state.deletedFolderIds = [...deleted];
+  localStorage.setItem(DELETED_FOLDER_IDS_KEY, JSON.stringify(state.deletedFolderIds));
+}
+
+function applyDeletedFolderFilter(appState) {
+  const deleted = getDeletedFolderIdsFrom(appState);
+  if (!deleted.size) return appState;
+  const folders = (appState.folders || []).filter((folder) => !deleted.has(folder.id));
+  const folderIds = new Set(folders.map((folder) => folder.id));
+  return {
+    ...appState,
+    folders,
+    activeFolderIds: (appState.activeFolderIds || []).filter((id) => folderIds.has(id)),
+    people: (appState.people || []).map((person) => ({
+      ...person,
+      folderIds: Array.isArray(person.folderIds)
+        ? person.folderIds.filter((id) => folderIds.has(id))
+        : [],
+    })),
+    deletedFolderIds: [...deleted],
+  };
+}
+
+function filterRemoteFolders(remoteState) {
+  const deleted = getDeletedFolderIdsFrom(remoteState);
+  const remoteDeleted = remoteState?.deletedFolderIds || [];
+  remoteDeleted.forEach((id) => deleted.add(id));
+  if (!deleted.size) return remoteState;
+  const folders = (remoteState.folders || []).filter((folder) => !deleted.has(folder.id));
+  const folderIds = new Set(folders.map((folder) => folder.id));
+  return {
+    ...remoteState,
+    folders,
+    activeFolderIds: (remoteState.activeFolderIds || []).filter((id) => folderIds.has(id)),
+    deletedFolderIds: [...deleted],
+  };
+}
+
 function applyDeletedPersonFilter(appState) {
   const deleted = getDeletedPersonIdsFrom(appState);
   if (!deleted.size) return appState;
@@ -379,28 +462,36 @@ function applyDeletedPersonFilter(appState) {
 }
 
 function filterRemotePeople(remoteState) {
-  const deleted = getDeletedPersonIdsFrom(remoteState);
+  const filtered = filterRemoteFolders(remoteState);
+  const deleted = getDeletedPersonIdsFrom(filtered);
   const remoteDeleted = remoteState?.deletedPersonIds || [];
   remoteDeleted.forEach((id) => deleted.add(id));
-  if (!deleted.size) return remoteState;
+  if (!deleted.size) return filtered;
   return {
-    ...remoteState,
-    people: (remoteState.people || []).filter((person) => !deleted.has(person.id)),
+    ...filtered,
+    people: (filtered.people || []).filter((person) => !deleted.has(person.id)),
     deletedPersonIds: [...deleted],
   };
 }
 
 function dropRemoteOnlyGhosts(localState, remoteState, mergedState) {
-  if ((localState.people || []).length === 0) return mergedState;
+  const deletedPeople = getDeletedPersonIdsFrom(localState);
+  const deletedFolders = getDeletedFolderIdsFrom(localState);
   const localIds = new Set((localState.people || []).map((person) => person.id));
   const remoteIds = new Set((remoteState.people || []).map((person) => person.id));
+  let people = (mergedState.people || []).filter((person) => {
+    if (deletedPeople.has(person.id)) return false;
+    if (localIds.has(person.id)) return true;
+    if (localIds.size > 0 && remoteIds.has(person.id)) return false;
+    return true;
+  });
+  let folders = (mergedState.folders || []).filter((folder) => !deletedFolders.has(folder.id));
+  const folderIds = new Set(folders.map((folder) => folder.id));
   return {
     ...mergedState,
-    people: (mergedState.people || []).filter((person) => {
-      if (localIds.has(person.id)) return true;
-      if (remoteIds.has(person.id)) return false;
-      return true;
-    }),
+    people,
+    folders,
+    activeFolderIds: (mergedState.activeFolderIds || []).filter((id) => folderIds.has(id)),
   };
 }
 
@@ -415,9 +506,13 @@ function scrubFiltersToPeople(appState) {
 }
 
 function preferLocalFiltersWhenShrunk(localState, remoteState, mergedState) {
-  const localCount = (localState.people || []).length;
-  const remoteCount = (remoteState.people || []).length;
-  if (localCount === 0 || localCount >= remoteCount) return mergedState;
+  const localPeople = (localState.people || []).length;
+  const remotePeople = (remoteState.people || []).length;
+  const localFolders = (localState.folders || []).length;
+  const remoteFolders = (remoteState.folders || []).length;
+  const shouldPreferLocal = localPeople > 0
+    && (localPeople < remotePeople || localFolders < remoteFolders);
+  if (!shouldPreferLocal) return mergedState;
   const names = new Set((mergedState.people || []).map((person) => getPersonFirstName(person)));
   const folderIds = new Set((mergedState.folders || []).map((folder) => folder.id));
   return {
@@ -443,8 +538,11 @@ function mergePeoplePreservingLocalEdits(localState, remoteState, mergedState) {
   });
 
   if ((localState.people || []).length === 0 && (remoteState.people || []).length > 0) {
+    const deleted = getDeletedPersonIdsFrom(localState);
     (remoteState.people || []).forEach((person) => {
-      if (person?.id) byId.set(person.id, normalizePerson(person));
+      if (person?.id && !deleted.has(person.id)) {
+        byId.set(person.id, normalizePerson(person));
+      }
     });
   }
 
@@ -490,9 +588,13 @@ function preserveLocalPeople(localState, mergedState) {
 
 function openAppDialog(dialog) {
   if (!dialog) return;
+  blurActiveInput();
   try {
     if (!dialog.open && typeof dialog.showModal === "function") {
       dialog.showModal();
+      blurActiveInput();
+      setTimeout(blurActiveInput, 0);
+      setTimeout(blurActiveInput, 120);
       return;
     }
   } catch (error) {
@@ -500,6 +602,9 @@ function openAppDialog(dialog) {
   }
   if (!dialog.open) {
     dialog.setAttribute("open", "");
+    blurActiveInput();
+    setTimeout(blurActiveInput, 0);
+    setTimeout(blurActiveInput, 120);
   }
 }
 
@@ -530,11 +635,6 @@ function openSyncDialog() {
       elements.serverUrlInput.value = FamilySync.getServerUrl() || "";
     }
     openAppDialog(elements.syncDialog);
-    try {
-      elements.familyCodeInput?.focus({ preventScroll: true });
-    } catch {
-      // ignore focus errors on some WebViews
-    }
   } catch (error) {
     console.error("openSyncDialog", error);
     alert(`Не открылось окно синхронизации: ${error?.message || error}`);
@@ -611,6 +711,12 @@ function bindEvents() {
   elements.createFamilyCodeButton.addEventListener("click", () => {
     elements.familyCodeInput.value = FamilySync.createFamilyCode();
   });
+  if (elements.clearLocalDataButton) {
+    elements.clearLocalDataButton.addEventListener("click", () => wipeAllAppData({ pushToCloud: false }));
+  }
+  if (elements.clearCloudDataButton) {
+    elements.clearCloudDataButton.addEventListener("click", () => wipeAllAppData({ pushToCloud: true }));
+  }
   elements.cancelPersonButton.addEventListener("click", () => elements.personDialog.close());
   elements.personForm.addEventListener("submit", savePerson);
   elements.addFolderButton.addEventListener("click", openFolderDialog);
@@ -688,7 +794,59 @@ function getDefaultState() {
     botGroupId: null,
     uiUpdatedAt: 0,
     deletedPersonIds: [],
+    deletedFolderIds: [],
   };
+}
+
+const WIPE_STORAGE_KEYS = [
+  STORAGE_KEY,
+  STORAGE_BACKUP_KEY,
+  DELETED_PERSON_IDS_KEY,
+  DELETED_FOLDER_IDS_KEY,
+  BOT_REVISION_KEY,
+  PENDING_BOT_REVISION_KEY,
+  BOT_EXPORT_SENT_REVISION_KEY,
+  LAST_APPLIED_BOT_REVISION_KEY,
+  PENDING_BOT_AT_KEY,
+  LAST_BOT_APPLY_KEY,
+  LOCAL_PUSH_REVISION_KEY,
+  BOT_SENT_REVISIONS_KEY,
+  "family-counter-local-version",
+  "family-counter-family-code",
+  "family-counter-telegram-token",
+  "family-counter-telegram-chat",
+  "family-counter-telegram-secret",
+  "family-counter-server-url",
+];
+
+function wipeAllAppData(options = {}) {
+  const pushToCloud = Boolean(options.pushToCloud);
+  const message = pushToCloud
+    ? "Удалить ВСЕ карты, банки и историю на телефоне и ЗАМЕНИТЬ данные в Telegram на пустое состояние? Другие телефоны при синхронизации тоже очистятся."
+    : "Удалить ВСЕ данные только на этом телефоне? (Карты, банки, история, фильтры)";
+  if (!confirm(message)) return;
+
+  WIPE_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+  state = getDefaultState();
+  state.uiUpdatedAt = Date.now();
+  editingPersonId = null;
+  currentOperation = null;
+  saveState({ skipPush: true });
+  render();
+
+  if (pushToCloud && window.FamilySync) {
+    markLocalEditPending();
+    if (FamilySync.pushImmediate) {
+      FamilySync.pushImmediate(state)
+        .then(() => alert("Данные очищены и отправлены в облако Telegram."))
+        .catch(() => alert("Данные очищены на телефоне. Облако: нет сети или ошибка отправки."));
+    } else if (FamilySync.push) {
+      FamilySync.push(state);
+      alert("Данные очищены и отправлены в облако Telegram.");
+    }
+  } else {
+    alert("Локальные данные удалены.");
+  }
 }
 
 function loadState() {
@@ -726,7 +884,8 @@ function loadState() {
   if (!loaded) return getDefaultState();
 
   loaded = migrateDeletedPersonIds(loaded);
-  const filtered = applyDeletedPersonFilter(loaded);
+  loaded = migrateDeletedFolderIds(loaded);
+  const filtered = applyDeletedPersonFilter(applyDeletedFolderFilter(loaded));
   const json = JSON.stringify(filtered);
   localStorage.setItem(STORAGE_KEY, json);
   localStorage.setItem(STORAGE_BACKUP_KEY, json);
@@ -748,12 +907,29 @@ function migrateDeletedPersonIds(appState) {
   return { ...appState, deletedPersonIds };
 }
 
+function migrateDeletedFolderIds(appState) {
+  const merged = new Set();
+  (appState.deletedFolderIds || []).forEach((id) => merged.add(id));
+  try {
+    const raw = localStorage.getItem(DELETED_FOLDER_IDS_KEY);
+    const stored = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(stored)) stored.forEach((id) => merged.add(id));
+  } catch {
+    // ignore broken tombstone storage
+  }
+  const deletedFolderIds = [...merged];
+  localStorage.setItem(DELETED_FOLDER_IDS_KEY, JSON.stringify(deletedFolderIds));
+  return { ...appState, deletedFolderIds };
+}
+
 function normalizeLoadedState(parsed) {
   if (!parsed) return getDefaultState();
-  const folders = Array.isArray(parsed.folders) ? parsed.folders : [];
+  let withTombstones = migrateDeletedPersonIds(migrateDeletedFolderIds(parsed));
+  withTombstones = applyDeletedPersonFilter(applyDeletedFolderFilter(withTombstones));
+  const folders = Array.isArray(withTombstones.folders) ? withTombstones.folders : [];
   const folderIds = new Set(folders.map((folder) => folder.id));
-  const people = Array.isArray(parsed.people)
-    ? parsed.people.map((person) => normalizePerson({
+  const people = Array.isArray(withTombstones.people)
+    ? withTombstones.people.map((person) => normalizePerson({
       ...person,
       folderIds: Array.isArray(person.folderIds)
         ? person.folderIds.filter((id) => folderIds.has(id))
@@ -761,24 +937,27 @@ function normalizeLoadedState(parsed) {
     }))
     : [];
   const existingFirstNames = new Set(people.map((person) => getPersonFirstName(person)));
-  const botGroupId = parsed.botGroupId != null && parsed.botGroupId !== ""
-    ? Number(parsed.botGroupId)
+  const botGroupId = withTombstones.botGroupId != null && withTombstones.botGroupId !== ""
+    ? Number(withTombstones.botGroupId)
     : null;
   return {
     people,
-    history: Array.isArray(parsed.history) ? parsed.history : [],
+    history: Array.isArray(withTombstones.history) ? withTombstones.history : [],
     folders,
-    activeFolderIds: Array.isArray(parsed.activeFolderIds)
-      ? parsed.activeFolderIds.filter((id) => folderIds.has(id))
+    activeFolderIds: Array.isArray(withTombstones.activeFolderIds)
+      ? withTombstones.activeFolderIds.filter((id) => folderIds.has(id))
       : [],
-    activeFirstNames: Array.isArray(parsed.activeFirstNames)
-      ? parsed.activeFirstNames.filter((name) => existingFirstNames.has(name))
+    activeFirstNames: Array.isArray(withTombstones.activeFirstNames)
+      ? withTombstones.activeFirstNames.filter((name) => existingFirstNames.has(name))
       : [],
-    singleFilterMode: Boolean(parsed.singleFilterMode),
+    singleFilterMode: Boolean(withTombstones.singleFilterMode),
     botGroupId: Number.isFinite(botGroupId) ? botGroupId : null,
-    uiUpdatedAt: Number(parsed.uiUpdatedAt || 0),
-    deletedPersonIds: Array.isArray(parsed.deletedPersonIds)
-      ? parsed.deletedPersonIds.filter(Boolean)
+    uiUpdatedAt: Number(withTombstones.uiUpdatedAt || 0),
+    deletedPersonIds: Array.isArray(withTombstones.deletedPersonIds)
+      ? withTombstones.deletedPersonIds.filter(Boolean)
+      : [],
+    deletedFolderIds: Array.isArray(withTombstones.deletedFolderIds)
+      ? withTombstones.deletedFolderIds.filter(Boolean)
       : [],
   };
 }
@@ -938,6 +1117,7 @@ function applySyncMetaFromRemote(remoteState) {
 
 function saveState(options = {}) {
   state.deletedPersonIds = [...getDeletedPersonIds()];
+  state.deletedFolderIds = [...getDeletedFolderIds()];
   const json = JSON.stringify(state);
   localStorage.setItem(STORAGE_KEY, json);
   localStorage.setItem(STORAGE_BACKUP_KEY, json);
@@ -1299,8 +1479,7 @@ function handleFolderClick(event) {
 
 function openFolderDialog() {
   elements.folderNameInput.value = "";
-  elements.folderDialog.showModal();
-  elements.folderNameInput.focus();
+  openAppDialog(elements.folderDialog);
 }
 
 function saveFolder(event) {
@@ -1331,7 +1510,7 @@ function openDeleteFolderDialog() {
     option.textContent = folder.name;
     elements.deleteFolderSelect.append(option);
   });
-  elements.deleteFolderDialog.showModal();
+  openAppDialog(elements.deleteFolderDialog);
 }
 
 function deleteSelectedFolder(event) {
@@ -1361,15 +1540,19 @@ function deleteFolder(folder) {
   const ok = confirm(`Удалить папку "${folder.name}"? Люди и история останутся.`);
   if (!ok) return false;
 
+  markLocalEditPending();
+  addDeletedFolderId(folder.id);
   state.folders = state.folders.filter((item) => item.id !== folder.id);
   state.activeFolderIds = state.activeFolderIds.filter((id) => id !== folder.id);
+  state.uiUpdatedAt = Date.now();
   state.people = state.people.map((person) => ({
     ...person,
     folderIds: Array.isArray(person.folderIds)
       ? person.folderIds.filter((id) => id !== folder.id)
       : [],
   }));
-  saveState();
+  saveState({ skipPush: true });
+  pushStateWithTombstones();
   render();
   return true;
 }
@@ -1566,8 +1749,7 @@ function openPersonDialog(person = null) {
   }
   elements.deletePersonButton.hidden = !person;
   renderFolderPicker(person?.folderIds ?? []);
-  elements.personDialog.showModal();
-  elements.personFirstNameInput.focus();
+  openAppDialog(elements.personDialog);
 }
 
 function renderFolderPicker(selectedFolderIds = []) {
@@ -1717,6 +1899,21 @@ function wasPersonInBot(person) {
   return Boolean(person.useInBot);
 }
 
+function pushStateWithTombstones() {
+  state.deletedPersonIds = [...getDeletedPersonIds()];
+  state.deletedFolderIds = [...getDeletedFolderIds()];
+  const json = JSON.stringify(state);
+  localStorage.setItem(STORAGE_KEY, json);
+  localStorage.setItem(STORAGE_BACKUP_KEY, json);
+  if (!window.FamilySync) return;
+  if (FamilySync.cancelPendingPush) FamilySync.cancelPendingPush();
+  if (FamilySync.pushImmediate) {
+    FamilySync.pushImmediate(state).catch(() => {});
+  } else if (FamilySync.push) {
+    FamilySync.push(state);
+  }
+}
+
 function deletePerson(person) {
   const ok = confirm(`Удалить "${person.name}"? История останется для просмотра.`);
   if (!ok) return false;
@@ -1731,14 +1928,10 @@ function deletePerson(person) {
   saveState({ skipPush: true });
   render();
 
-  if (window.FamilySync?.cancelPendingPush) {
-    FamilySync.cancelPendingPush();
-  }
-
   if (wasInBot) {
     removePersonFromBot(personSnapshot);
-  } else if (window.FamilySync?.push) {
-    FamilySync.push(state);
+  } else {
+    pushStateWithTombstones();
   }
 
   return true;
@@ -1760,7 +1953,7 @@ function removePersonFromBot(person) {
   markLocalEditPending();
   pushBotExportPayload(clearPayload, { skipPendingMark: true })
     .then(() => {
-      if (window.FamilySync?.push) FamilySync.push(state);
+      pushStateWithTombstones();
     })
     .catch(() => {});
 }
@@ -1809,7 +2002,7 @@ function openOperationDialog(person, direction) {
   amountChangeStack = [];
   setAmountMode("plus");
   updateSelectedAmount(0);
-  elements.operationDialog.showModal();
+  openAppDialog(elements.operationDialog);
 }
 
 function closeOperationDialog() {
