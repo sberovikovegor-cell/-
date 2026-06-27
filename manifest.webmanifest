@@ -1,0 +1,20 @@
+{
+  "name": "Семейный счетчик",
+  "short_name": "Счетчик",
+  "description": "Офлайн помощник для учета пополнений, покупок и переводов семьи.",
+  "lang": "ru",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#0f172a",
+  "theme_color": "#16213e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#16213e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Семейный счетчик</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css?v=59">
+  </head>
+  <body>
+    <div class="bot-pending-banner" id="botPendingBanner" hidden>
+      Запрос в бот отложен — подключитесь к интернету
+    </div>
+    <div class="bot-success-banner" id="botSuccessBanner" hidden>
+      Данные успешно отправлены
+    </div>
+    <div class="sync-alert-banner" id="syncAlertBanner" hidden></div>
+    <div class="app">
+      <main>
+        <section class="card top-bar">
+          <div class="top-bar-row">
+            <div class="top-metric">
+              <span class="top-label">Баланс</span>
+              <strong id="familyTotal">0</strong>
+            </div>
+            <div class="top-metric">
+              <span class="top-label">Траты</span>
+              <strong id="familyPurchaseTotal" class="purchase">0</strong>
+            </div>
+            <div class="top-metric">
+              <span class="top-label">Переводы</span>
+              <strong id="familyTransferTotal" class="transfer">0</strong>
+            </div>
+            <div class="top-bar-actions">
+              <button class="ghost compact" type="button" id="detailsToggleButton">Подробней</button>
+              <button class="ghost compact" type="button" id="historyToggleButton">История</button>
+              <button class="primary compact" type="button" id="addPersonButton">+ Карта</button>
+            </div>
+          </div>
+          <div class="sync-row">
+            <span class="sync-status" id="syncStatus" data-status="local">Только этот телефон</span>
+            <span class="app-version" id="appVersion"></span>
+            <button class="ghost mini" type="button" id="openSyncDialogButton">Код семьи</button>
+          </div>
+        </section>
+
+        <div id="mainView">
+        <section class="card stats-card stats-card-top">
+          <div class="stats-grid">
+            <div>
+              <span class="stats-label">Пополнений</span>
+              <strong id="incomeCount">0</strong>
+            </div>
+            <div>
+              <span class="stats-label">Покупок</span>
+              <strong id="purchaseCount">0</strong>
+            </div>
+            <div>
+              <span class="stats-label">Переводов</span>
+              <strong id="transferCount">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="card folder-card">
+          <div class="banks-bar">
+            <span class="inline-label">Банки</span>
+            <div class="folder-list folder-list-flow" id="folderList" aria-label="Банки-фильтры"></div>
+            <div class="banks-controls">
+              <span class="single-filter-text">1 фильтр</span>
+              <button class="toggle-chip" type="button" id="singleFilterToggle" aria-label="Только один фильтр">🚫</button>
+              <button class="ghost mini" type="button" id="deleteFolderButton" aria-label="Удалить банк">−</button>
+              <button class="ghost mini" type="button" id="addFolderButton" aria-label="Добавить банк">+</button>
+            </div>
+          </div>
+          <div class="folder-row">
+            <span class="inline-label">Имена</span>
+            <div class="folder-list" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
+          </div>
+        </section>
+
+        <section class="people" id="peopleList" aria-label="Список людей"></section>
+        </div>
+
+        <section class="card details-card" id="detailsView" hidden>
+          <div class="section-title details-head">
+            <div>
+              <span class="label">Подробно</span>
+              <h2>Все карты</h2>
+            </div>
+          </div>
+          <section class="people" id="detailsPeopleList" aria-label="Подробный список людей"></section>
+          <div class="details-copy-all" id="detailsCopyAll">
+            <span class="inline-label">Все люди</span>
+            <div class="person-copy-actions details-copy-actions">
+              <button type="button" class="copy-chip" data-copy-all="phone">Телефон</button>
+              <button type="button" class="copy-chip" data-copy-all="card">Карта</button>
+              <button type="button" class="copy-chip" data-copy-all="phone-card">Тел+карта</button>
+              <button type="button" class="copy-chip" data-copy-all="brief">Краткие данные</button>
+              <button type="button" class="copy-chip" data-copy-all="full">Все данные</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card history-card" id="historyView" hidden>
+          <div class="section-title">
+            <div>
+              <span class="label">История</span>
+              <h2>Все операции</h2>
+            </div>
+            <button class="ghost" type="button" id="clearHistoryButton">Очистить</button>
+          </div>
+
+          <div class="filters">
+            <select id="personFilter" aria-label="Фильтр по имени"></select>
+            <select id="typeFilter" aria-label="Фильтр по разделу">
+              <option value="all">Все разделы</option>
+              <option value="income">Пополнения</option>
+              <option value="purchase">Покупки</option>
+              <option value="transfer">Переводы</option>
+            </select>
+          </div>
+          <label class="history-comment-filter">
+            <span class="label">Поиск по комментарию</span>
+            <input
+              id="commentFilter"
+              type="search"
+              aria-label="Поиск по комментарию"
+              placeholder="Например: Магазин"
+              autocomplete="off"
+            >
+          </label>
+
+          <div class="tabs" role="tablist" aria-label="Быстрый фильтр истории">
+            <button class="tab active" data-type="all">Все</button>
+            <button class="tab" data-type="income">Пополнения</button>
+            <button class="tab" data-type="purchase">Покупки</button>
+            <button class="tab" data-type="transfer">Переводы</button>
+          </div>
+
+          <div class="history-list" id="historyList"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="personDialog">
+      <form method="dialog" class="dialog-card" id="personForm">
+        <h2 id="personDialogTitle">Добавить карту</h2>
+        <label>
+          Имя
+          <input id="personFirstNameInput" autocomplete="off" maxlength="32" placeholder="Например: Саня" required>
+        </label>
+        <label>
+          Фамилия
+          <input id="personLastNameInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
+        </label>
+        <label>
+          Начальная сумма
+          <input id="personBalanceInput" inputmode="decimal" placeholder="0">
+        </label>
+        <label>
+          Телефон
+          <input id="personPhoneInput" type="tel" autocomplete="off" maxlength="24" placeholder="Необязательно">
+        </label>
+        <label>
+          Номер карты
+          <input id="personCardNumberInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
+        </label>
+        <label>
+          Данные к карте
+          <input id="personCardDetailsInput" autocomplete="off" maxlength="64" placeholder="Банк, Сбер, Озон…">
+        </label>
+        <label>
+          Комментарий
+          <input id="personProfileNoteInput" autocomplete="off" maxlength="120" placeholder="Необязательно">
+        </label>
+        <div class="folder-picker-block">
+          <span class="label">Папки</span>
+          <div class="folder-picker" id="personFolderPicker"></div>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="personUseInBotCheckbox">
+          Использовать в боте (умные переменные)
+        </label>
+        <p class="muted sync-hint person-bot-hint">Группа настраивается в админ-боте: 📱 Приложение. ID группы в приложении не нужен.</p>
+        <button class="danger" type="button" id="deletePersonButton" hidden>Удалить карту</button>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" id="cancelPersonButton">Отмена</button>
+          <button class="primary" value="default">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="folderDialog">
+      <form method="dialog" class="dialog-card" id="folderForm">
+        <h2>Добавить папку</h2>
+        <label>
+          Название папки
+          <input id="folderNameInput" autocomplete="off" maxlength="32" placeholder="Например: Мальчики ✅" required>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" id="cancelFolderButton">Отмена</button>
+          <button class="primary" value="default">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deleteFolderDialog">
+      <form method="dialog" class="dialog-card" id="deleteFolderForm">
+        <h2>Удалить папку</h2>
+        <label>
+          Какая папка
+          <select id="deleteFolderSelect" required></select>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" id="cancelDeleteFolderButton">Отмена</button>
+          <button class="danger" value="default">Удалить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="operationDialog">
+      <form method="dialog" class="dialog-card operation-dialog" id="operationForm">
+        <div class="section-title">
+          <div>
+            <span class="label" id="operationPerson">Имя</span>
+            <h2 id="operationTitle">Операция</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelOperationButton">Выйти</button>
+        </div>
+
+        <div class="amount-preview">
+          <span>Выбрано</span>
+          <strong id="selectedAmount">0</strong>
+        </div>
+
+        <div class="amount-mode" aria-label="Режим выбора суммы">
+          <button class="tab active" type="button" id="addAmountModeButton">Добавлять +</button>
+          <button class="tab" type="button" id="subtractAmountModeButton">Убавлять -</button>
+        </div>
+
+        <div class="quick-grid" id="amountButtons"></div>
+
+        <div class="manual-row">
+          <input id="manualAmountInput" inputmode="decimal" placeholder="Своя сумма">
+          <button class="ghost" type="button" id="addManualAmountButton">Добавить</button>
+        </div>
+
+        <div class="amount-aux-row">
+          <button class="ghost" type="button" id="undoAmountButton">Назад</button>
+          <button class="ghost" type="button" id="clearAmountButton">Очистить</button>
+        </div>
+
+        <label class="checkbox-row" id="transferToggleRow">
+          <input type="checkbox" id="transferCheckbox">
+          Это перевод, а не покупка
+        </label>
+
+        <label>
+          Комментарий
+          <input id="noteInput" maxlength="80" placeholder="Например: продукты, школа, такси">
+        </label>
+
+        <div class="dialog-actions operation-dialog-actions">
+          <button class="ghost" type="button" id="exitOperationButton">Выйти</button>
+          <button class="danger" type="button" id="resetAmountButton">Сбросить</button>
+          <button class="primary" value="default" id="confirmOperationButton">Подтвердить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="syncDialog">
+      <form method="dialog" class="dialog-card" id="syncForm">
+        <h2>Синхронизация</h2>
+        <p class="muted sync-hint" id="syncModeHint">Telegram: зашифрованный файл в канал. Работает с мобильной сети.</p>
+        <label class="telegram-sync-field">
+          Токен бота
+          <input id="telegramBotTokenInput" autocomplete="off" placeholder="123456:ABC...">
+        </label>
+        <label class="telegram-sync-field">
+          ID канала
+          <input id="telegramChatIdInput" autocomplete="off" placeholder="-1001234567890">
+        </label>
+        <label class="telegram-sync-field">
+          Секрет синхронизации
+          <input id="telegramSecretInput" autocomplete="off" placeholder="Один на всю семью">
+        </label>
+        <label class="pc-sync-field" hidden>
+          Адрес ПК (бот)
+          <input id="serverUrlInput" autocomplete="off" placeholder="http://192.168.1.100:8767">
+        </label>
+        <label>
+          Код семьи
+          <input id="familyCodeInput" autocomplete="off" maxlength="8" placeholder="Например: ABC123" required>
+        </label>
+        <p class="muted sync-hint">Группа умных переменных настраивается в админ-боте (📱 Приложение). «В боте»: человек 1 → значение 1, человек 3 → значение 3; если в боте уже есть строки 1–5, новые пойдут в 6, 7, 8…</p>
+        <button class="ghost" type="button" id="createFamilyCodeButton">Создать новый код</button>
+        <div class="dialog-actions">
+          <button class="ghost" type="button" id="cancelSyncButton">Отмена</button>
+          <button class="primary" value="default">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="botOfflineDialog">
+      <form method="dialog" class="dialog-card">
+        <h2>Нет интернета</h2>
+        <p class="dialog-hint">
+          У вас нет интернета, чтобы отправить запрос в бот.
+          Хотите отправить этот запрос, как только появится интернет?
+        </p>
+        <div class="dialog-actions">
+          <button type="submit" class="ghost" value="cancel">Отменить</button>
+          <button type="submit" class="primary" value="confirm">Да</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <strong>Пока пусто</strong>
+        <span>Добавьте карту и начните вести пополнения или траты.</span>
+      </div>
+    </template>
+
+    <button class="icon-button" id="installButton" hidden>Установить</button>
+    <script src="server-config.js?v=59"></script>
+    <script src="telegram-config.js?v=59"></script>
+    <script src="telegram-crypto.js?v=59"></script>
+    <script src="sync-merge.js?v=59"></script>
+    <script src="sync.js?v=59"></script>
+    <script src="sync-telegram.js?v=59"></script>
+    <script src="app.js?v=59" defer></script>
+  </body>
+</html>
