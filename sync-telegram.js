@@ -297,7 +297,11 @@
         const raw = localStorage.getItem("family-counter-v1");
         if (!raw) return 0;
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed.people) ? parsed.people.length : 0;
+        const deleted = new Set();
+        (parsed.deletedPersonIds || []).forEach((id) => deleted.add(id));
+        return Array.isArray(parsed.people)
+          ? parsed.people.filter((person) => !deleted.has(person.id)).length
+          : 0;
       } catch {
         return 0;
       }
@@ -502,18 +506,42 @@
     if (pendingBotRev > 0) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
-      if (!isNetworkAvailable()) {
-        updateSyncStatus("offline", "Офлайн");
-        return;
-      }
-      updateSyncStatus("online", "Отправка…");
-      pushToTelegram(localState, null).then(() => {
-        updateSyncStatus("synced", "Синхронизировано");
-      }).catch((error) => {
-        console.warn("tg push", error);
-        updateSyncStatus("offline", "Ошибка Telegram");
-      });
+      runPush(localState);
     }, 600);
+  }
+
+  function runPush(localState) {
+    if (!isSyncReady()) return;
+    if (!isNetworkAvailable()) {
+      updateSyncStatus("offline", "Офлайн");
+      return;
+    }
+    updateSyncStatus("online", "Отправка…");
+    pushToTelegram(localState, null).then(() => {
+      updateSyncStatus("synced", "Синхронизировано");
+    }).catch((error) => {
+      console.warn("tg push", error);
+      updateSyncStatus("offline", "Ошибка Telegram");
+    });
+  }
+
+  function pushImmediate(localState) {
+    if (!isSyncReady()) return Promise.resolve();
+    const pendingBotRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
+    if (pendingBotRev > 0) return Promise.resolve();
+    cancelPendingPush();
+    if (!isNetworkAvailable()) {
+      updateSyncStatus("offline", "Офлайн");
+      return Promise.reject(new Error("offline"));
+    }
+    updateSyncStatus("online", "Отправка…");
+    return pushToTelegram(localState, null).then(() => {
+      updateSyncStatus("synced", "Синхронизировано");
+    }).catch((error) => {
+      console.warn("tg push immediate", error);
+      updateSyncStatus("offline", "Ошибка Telegram");
+      throw error;
+    });
   }
 
   function cancelPendingPush() {
@@ -556,6 +584,7 @@
     initFirebase: (callback, options) => initSync(callback, options),
     initSync,
     push,
+    pushImmediate,
     cancelPendingPush,
     pushBotExport,
     pushWithBotExport,
