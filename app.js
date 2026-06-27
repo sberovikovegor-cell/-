@@ -11,7 +11,7 @@ const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "69";
+const APP_BUILD = "70";
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -245,6 +245,11 @@ function initFamilySync() {
       applyRemoteStateAsReplace(normalizedRemote, 0);
       return;
     }
+    if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
+      applySyncMetaFromRemote(normalizedRemote);
+      render();
+      return;
+    }
     applySyncMetaFromRemote(normalizedRemote);
     state = applyDeletedPersonFilter(normalizeLoadedState(normalizedRemote));
     state = mergePeoplePreservingLocalEdits(localBefore, normalizedRemote, state);
@@ -325,6 +330,11 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   const localBefore = applyDeletedPersonFilter(normalizeLoadedState(state));
   if (shouldReplaceWithRemoteWipe(localBefore, normalizedRemote)) {
     applyRemoteStateAsReplace(normalizedRemote, remoteVersion);
+    return;
+  }
+  if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
+    applySyncMetaFromRemote(normalizedRemote);
+    render();
     return;
   }
   applySyncMetaFromRemote(normalizedRemote);
@@ -822,6 +832,12 @@ function shouldReplaceWithRemoteWipe(localState, remoteState) {
   const remoteWipe = Number(remoteState?.wipedAtMs || 0);
   const localWipe = Number(localState?.wipedAtMs || 0);
   return remoteWipe > 0 && remoteWipe >= localWipe;
+}
+
+function shouldRejectStaleRemoteState(localState, remoteState) {
+  const localWipe = Number(localState?.wipedAtMs || 0);
+  const remoteWipe = Number(remoteState?.wipedAtMs || 0);
+  return localWipe > 0 && localWipe > remoteWipe;
 }
 
 function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
