@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="styles.css?v=62">
+    <link rel="stylesheet" href="styles.css?v=65">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -334,6 +334,11 @@
         </label>
         <p class="muted sync-hint">Группа умных переменных настраивается в админ-боте (📱 Приложение). «В боте»: человек 1 → значение 1, человек 3 → значение 3; если в боте уже есть строки 1–5, новые пойдут в 6, 7, 8…</p>
         <button class="ghost" type="button" id="createFamilyCodeButton">Создать новый код</button>
+        <div class="sync-danger-zone">
+          <p class="muted sync-hint">Если после синхронизации возвращаются старые карты — очистите данные.</p>
+          <button class="ghost danger-text" type="button" id="clearLocalDataButton">Очистить только на телефоне</button>
+          <button class="ghost danger-text" type="button" id="clearCloudDataButton">Очистить телефон и облако Telegram</button>
+        </div>
         <div class="dialog-actions">
           <button class="ghost" type="button" id="cancelSyncButton">Отмена</button>
           <button class="primary" value="default">Сохранить</button>
@@ -363,12 +368,12 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=62" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=62" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="telegram-crypto.js?v=62" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=62" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=62" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=62" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="app.js?v=62" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=65" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=65" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="telegram-crypto.js?v=65" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=65" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=65" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=65" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="app.js?v=65" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
