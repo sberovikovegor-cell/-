@@ -10,8 +10,9 @@ const LOCAL_PUSH_REVISION_KEY = "family-counter-local-push-revision";
 const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
+const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "70";
+const APP_BUILD = "71";
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -54,6 +55,10 @@ window.addEventListener("unhandledrejection", (event) => {
 let state;
 try {
   state = loadState();
+  if (state.wipedAtMs > 0) {
+    const prevCloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
+    localStorage.setItem(CLOUD_WIPE_AT_KEY, String(Math.max(prevCloudWipe, state.wipedAtMs)));
+  }
 } catch (error) {
   console.error("loadState failed", error);
   showBootError(error?.message || String(error));
@@ -350,6 +355,11 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = applyDeletedFolderFilter(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
+  state.wipedAtMs = Math.max(
+    Number(state.wipedAtMs || 0),
+    Number(localBefore.wipedAtMs || 0),
+    Number(normalizedRemote.wipedAtMs || 0),
+  );
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
   reconcileDeletedPersonIds(normalizedRemote);
@@ -837,7 +847,13 @@ function shouldReplaceWithRemoteWipe(localState, remoteState) {
 function shouldRejectStaleRemoteState(localState, remoteState) {
   const localWipe = Number(localState?.wipedAtMs || 0);
   const remoteWipe = Number(remoteState?.wipedAtMs || 0);
-  return localWipe > 0 && localWipe > remoteWipe;
+  const cloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
+  if (localWipe > 0 && localWipe > remoteWipe) return true;
+  if (cloudWipe > 0 && cloudWipe > remoteWipe) return true;
+  const localCount = (localState?.people || []).length;
+  const remoteCount = (remoteState?.people || []).length;
+  if (remoteCount > localCount + 2 && localWipe >= remoteWipe) return true;
+  return false;
 }
 
 function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
@@ -849,6 +865,9 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   localStorage.setItem(DELETED_PERSON_IDS_KEY, JSON.stringify(state.deletedPersonIds));
   localStorage.setItem(DELETED_FOLDER_IDS_KEY, JSON.stringify(state.deletedFolderIds));
   applySyncMetaFromRemote(state);
+  if (state.wipedAtMs > 0) {
+    localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
   if (remoteVersion > 0) {
@@ -885,6 +904,7 @@ function wipeAllAppData(options = {}) {
   state = getDefaultState();
   state.wipedAtMs = Date.now();
   state.uiUpdatedAt = Date.now();
+  localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
   editingPersonId = null;
   currentOperation = null;
   saveState({ skipPush: true });
@@ -893,7 +913,10 @@ function wipeAllAppData(options = {}) {
   if (pushToCloud && window.FamilySync) {
     if (FamilySync.pushImmediate) {
       FamilySync.pushImmediate(state, { replaceRemote: true })
-        .then(() => alert("Данные очищены и отправлены в облако Telegram."))
+        .then(() => {
+          localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
+          alert("Данные очищены и отправлены в облако Telegram.");
+        })
         .catch(() => alert("Данные очищены на телефоне. Облако: нет сети или ошибка отправки."));
     } else if (FamilySync.push) {
       FamilySync.push(state, { replaceRemote: true });
@@ -1008,6 +1031,9 @@ function normalizeLoadedState(parsed) {
     singleFilterMode: Boolean(withTombstones.singleFilterMode),
     botGroupId: Number.isFinite(botGroupId) ? botGroupId : null,
     uiUpdatedAt: Number(withTombstones.uiUpdatedAt || 0),
+    wipedAtMs: Number(withTombstones.wipedAtMs || 0),
+    syncAlert: withTombstones.syncAlert || null,
+    syncHealth: withTombstones.syncHealth || null,
     deletedPersonIds: Array.isArray(withTombstones.deletedPersonIds)
       ? withTombstones.deletedPersonIds.filter(Boolean)
       : [],
@@ -2551,7 +2577,7 @@ function pushBotExportPayload(payload, options = {}) {
 
   const stateForPush = normalizeLoadedState(state);
   const send = window.FamilySync.pushWithBotExport
-    ? FamilySync.pushWithBotExport(stateForPush, payload)
+    ? FamilySync.pushWithBotExport(stateForPush, payload, { replaceRemote: true })
     : FamilySync.pushBotExport(payload);
 
   return send.then(() => {
