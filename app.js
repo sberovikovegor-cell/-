@@ -10,7 +10,13 @@ const LOCAL_PUSH_REVISION_KEY = "family-counter-local-push-revision";
 const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "61";
+const APP_BUILD = "62";
+const QUICK_AMOUNTS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
+const TYPE_LABELS = {
+  income: "Пополнение",
+  purchase: "Покупка",
+  transfer: "Перевод",
+};
 
 function showBootError(message) {
   const text = String(message || "ошибка");
@@ -141,13 +147,6 @@ const elements = {
 };
 
 init();
-
-const QUICK_AMOUNTS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
-const TYPE_LABELS = {
-  income: "Пополнение",
-  purchase: "Покупка",
-  transfer: "Перевод",
-};
 
 function init() {
   try {
