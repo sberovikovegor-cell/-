@@ -11,7 +11,7 @@ const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "65";
+const APP_BUILD = "68";
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -477,14 +477,7 @@ function filterRemotePeople(remoteState) {
 function dropRemoteOnlyGhosts(localState, remoteState, mergedState) {
   const deletedPeople = getDeletedPersonIdsFrom(localState);
   const deletedFolders = getDeletedFolderIdsFrom(localState);
-  const localIds = new Set((localState.people || []).map((person) => person.id));
-  const remoteIds = new Set((remoteState.people || []).map((person) => person.id));
-  let people = (mergedState.people || []).filter((person) => {
-    if (deletedPeople.has(person.id)) return false;
-    if (localIds.has(person.id)) return true;
-    if (localIds.size > 0 && remoteIds.has(person.id)) return false;
-    return true;
-  });
+  let people = (mergedState.people || []).filter((person) => !deletedPeople.has(person.id));
   let folders = (mergedState.folders || []).filter((folder) => !deletedFolders.has(folder.id));
   const folderIds = new Set(folders.map((folder) => folder.id));
   return {
@@ -672,6 +665,17 @@ function saveFamilyCode(event) {
   startCloudSync();
   FamilySync.push(state);
   retryBotExportIfNeeded();
+  if (FamilySync.testTelegramConnection) {
+    FamilySync.testTelegramConnection().then((result) => {
+      if (!result.ok) {
+        alert(
+          `Код семьи сохранён, но Telegram не отвечает: ${result.error}\n\n`
+          + "Проверьте: бот — админ канала с правом «закреплять»; токен не отозван; "
+          + "на телефоне не блокируют api.telegram.org (VPN или telegramApiBase в telegram-config.js).",
+        );
+      }
+    });
+  }
 }
 
 function bindSyncDialogOpen() {
@@ -1908,7 +1912,12 @@ function pushStateWithTombstones() {
   if (!window.FamilySync) return;
   if (FamilySync.cancelPendingPush) FamilySync.cancelPendingPush();
   if (FamilySync.pushImmediate) {
-    FamilySync.pushImmediate(state).catch(() => {});
+    FamilySync.pushImmediate(state).catch((error) => {
+      const reason = FamilySync.getSyncBlockedReason?.();
+      const msg = reason || error?.message || "ошибка";
+      console.warn("push tombstones", error);
+      alert(`Не отправлено в канал Telegram: ${msg}`);
+    });
   } else if (FamilySync.push) {
     FamilySync.push(state);
   }
@@ -2163,7 +2172,21 @@ function showBotSyncSuccessMessage() {
 }
 
 function confirmOfflineBotSync() {
+  const blocked = FamilySync.getSyncBlockedReason?.();
+  if (blocked) {
+    alert(
+      `${blocked}\n\nОткройте «Код семьи» (строка статуса вверху) и нажмите «Сохранить».`,
+    );
+    return Promise.resolve(false);
+  }
   if (!elements.botOfflineDialog) return Promise.resolve(true);
+  const hint = elements.botOfflineDialog.querySelector(".dialog-hint");
+  if (hint) {
+    hint.textContent =
+      "Telegram не отвечает (блокировка API, неверный токен, бот не в канале). "
+      + "Запрос в бот ПК можно отложить. Для пополнений и трат main.py не нужен — "
+      + "данные отправляются sync-ботом прямо в канал.";
+  }
   openAppDialog(elements.botOfflineDialog);
   return new Promise((resolve) => {
     const onClose = () => {
@@ -2183,7 +2206,8 @@ function renderBotPendingBanner() {
     return;
   }
   elements.botPendingBanner.hidden = false;
-  elements.botPendingBanner.textContent = "Запрос в бот отложен — подключитесь к интернету";
+  elements.botPendingBanner.textContent =
+    "Запрос в бот отложен — нужна связь с Telegram (main.py только для бота ПК с картами)";
 }
 
 function cancelBotPendingForPerson(personId) {
