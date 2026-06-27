@@ -535,6 +535,68 @@ dialog {
   background: rgba(255, 209, 102, 0.14);
 }
 
+.boot-error-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 14, 28, 0.97);
+  pointer-events: none;
+}
+
+.boot-error-screen--loading {
+  background: rgba(10, 14, 28, 0.55);
+}
+
+.boot-error-screen--error {
+  background: rgba(40, 8, 8, 0.97);
+  pointer-events: auto;
+}
+
+.boot-error-screen.boot-error-screen--hidden {
+  display: none;
+}
+
+.boot-error-card {
+  max-width: 100%;
+  width: 100%;
+  color: #fff;
+  text-align: center;
+}
+
+.boot-error-card strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+.boot-error-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 200, 200, 0.85);
+  margin-bottom: 12px;
+}
+
+.boot-error-log {
+  display: block;
+  margin: 0;
+  padding: 12px;
+  max-height: 50vh;
+  overflow: auto;
+  text-align: left;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 120, 120, 0.5);
+  border-radius: 8px;
+  color: #ffb4b4;
+}
+
 .sync-alert-banner {
   position: sticky;
   top: 0;
