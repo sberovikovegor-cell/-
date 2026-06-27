@@ -131,9 +131,42 @@
 
   function isNetworkAvailable() {
     if (navigator.onLine) return true;
-    // Android APK (file://): WebView часто ошибочно reports offline
     if (window.location.protocol === "file:") return true;
     return false;
+  }
+
+  function schedulePostPushPull() {
+    [2500, 6000, 12000, 25000].forEach((ms) => {
+      setTimeout(() => {
+        if (!isSyncReady() || !isNetworkAvailable()) return;
+        pullFromTelegram()
+          .then((pulled) => {
+            if (pulled) updateSyncStatus("synced", "Синхронизировано");
+          })
+          .catch(() => {});
+      }, ms);
+    });
+  }
+
+  function getSyncBlockedReason() {
+    if (!isConfigured()) return "Укажите токен бота, ID канала и секрет";
+    if (!getFamilyCode()) return "Введите код семьи и нажмите Сохранить";
+    if (!syncActive) return "Синхронизация не запущена — откройте «Код семьи» и сохраните";
+    return null;
+  }
+
+  function getCustomApiRoot() {
+    const raw = String(cfg.telegramApiBase || cfg.apiBaseUrl || "").trim().replace(/\/+$/, "");
+    return raw || null;
+  }
+
+  async function testTelegramConnection() {
+    try {
+      await tgGet("getMe", {});
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error?.message || String(error) };
+    }
   }
 
   function isConfigured() {
@@ -145,7 +178,10 @@
   }
 
   function getFamilyCode() {
-    return localStorage.getItem(FAMILY_CODE_KEY) || "";
+    const stored = localStorage.getItem(FAMILY_CODE_KEY);
+    if (stored) return stored;
+    const fromCfg = String(cfg.familyCode || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    return fromCfg.length >= 4 ? fromCfg : "";
   }
 
   function setFamilyCode(code) {
@@ -183,6 +219,11 @@
   function tgApiUrl(method, params) {
     const token = getBotToken();
     const qs = new URLSearchParams(params);
+    const custom = getCustomApiRoot();
+    if (custom) {
+      qs.set("token", token);
+      return `${custom}/${method}?${qs}`;
+    }
     if (useLocalTgProxy()) {
       qs.set("token", token);
       return `${window.location.origin}/tg-proxy/api/${method}?${qs}`;
@@ -192,6 +233,12 @@
 
   function tgFileUrl(filePath) {
     const token = getBotToken();
+    const custom = getCustomApiRoot();
+    if (custom) {
+      const root = custom.replace(/\/api\/?$/, "");
+      const qs = new URLSearchParams({ token, path: filePath });
+      return `${root}/file?${qs}`;
+    }
     if (useLocalTgProxy()) {
       const qs = new URLSearchParams({ token, path: filePath });
       return `${window.location.origin}/tg-proxy/file?${qs}`;
@@ -201,11 +248,40 @@
 
   function tgPostUrl(method) {
     const token = getBotToken();
+    const custom = getCustomApiRoot();
+    if (custom) {
+      const qs = new URLSearchParams({ token });
+      return `${custom}/${method}?${qs}`;
+    }
     if (useLocalTgProxy()) {
       const qs = new URLSearchParams({ token });
       return `${window.location.origin}/tg-proxy/api/${method}?${qs}`;
     }
     return `https://api.telegram.org/bot${token}/${method}`;
+  }
+
+  async function tgPostJson(method, params = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(tgPostUrl(method), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!data.ok) throw new Error(data.description || `Telegram ${method}`);
+      return data.result;
+    } catch (error) {
+      const msg = error?.message || "ошибка";
+      if (msg.includes("abort") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        throw new Error("Нет связи с Telegram (сеть или блокировка API)");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async function tgGet(method, params) {
@@ -218,7 +294,12 @@
       return data.result;
     } catch (error) {
       console.warn("tg get", method, error);
-      updateSyncStatus("offline", `Telegram: ${error.message || "ошибка"}`);
+      const msg = error?.message || "ошибка";
+      if (msg.includes("abort") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        updateSyncStatus("offline", "Нет связи с Telegram");
+      } else {
+        updateSyncStatus("offline", `Telegram: ${msg}`);
+      }
       throw error;
     } finally {
       clearTimeout(timer);
@@ -250,12 +331,6 @@
     if (parts[1] !== code) return null;
 
     const remoteVersion = Number(parts[2] || 0);
-    const localVersion = Number(localStorage.getItem(LOCAL_VERSION_KEY) || 0);
-    if (pendingBotRev <= 0) {
-      if (remoteVersion <= localVersion) return null;
-    } else if (remoteVersion < localVersion) {
-      // Старый LOCAL_VERSION мог быть завышен при отправке FC_PUSH — всё равно тянем ответ бота.
-    }
 
     const fileMeta = await tgGet("getFile", { file_id: pinned.document.file_id });
     const fileUrl = tgFileUrl(fileMeta.file_path);
@@ -276,58 +351,20 @@
     const { payload, remoteVersion } = result;
     const localVersion = Number(localStorage.getItem(LOCAL_VERSION_KEY) || 0);
     const localPushRev = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0);
-    const deletedIds = (() => {
-      const ids = new Set();
-      try {
-        const tombRaw = localStorage.getItem("family-counter-deleted-person-ids");
-        const tomb = tombRaw ? JSON.parse(tombRaw) : [];
-        if (Array.isArray(tomb)) tomb.forEach((id) => ids.add(id));
-        const raw = localStorage.getItem("family-counter-v1");
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          (parsed.deletedPersonIds || []).forEach((id) => ids.add(id));
-        }
-      } catch {
-        // ignore broken local tombstones
-      }
-      return ids;
-    })();
-    const localPeopleCount = (() => {
-      try {
-        const raw = localStorage.getItem("family-counter-v1");
-        if (!raw) return 0;
-        const parsed = JSON.parse(raw);
-        const deleted = new Set();
-        (parsed.deletedPersonIds || []).forEach((id) => deleted.add(id));
-        return Array.isArray(parsed.people)
-          ? parsed.people.filter((person) => !deleted.has(person.id)).length
-          : 0;
-      } catch {
-        return 0;
-      }
-    })();
-    const remotePeopleCount = Array.isArray(payload.state?.people)
-      ? payload.state.people.filter((person) => !deletedIds.has(person.id)).length
-      : 0;
-    const isStaleState = localPushRev > 0 && remoteVersion > 0 && remoteVersion < localPushRev;
 
     if (payload.botExport && onBotExportRemote) {
       onBotExportRemote(payload.botExport);
     }
 
-    const allowByVersion = remoteVersion >= localVersion;
-    const allowMorePeople = remotePeopleCount > localPeopleCount && localPushRev === 0;
-    const staleOk = !isStaleState || remotePeopleCount <= localPeopleCount;
-    const rejectStaleExtraPeople = localPeopleCount > 0
-      && remotePeopleCount > localPeopleCount
-      && remoteVersion <= localVersion;
+    // Не подменять локальное состояние устаревшим FC_STATE, пока ждём ответ бота на FC_PUSH
+    const staleWhileBotPending = localPushRev > 0
+      && remoteVersion > 0
+      && remoteVersion < localPushRev;
 
     const shouldApplyState = payload.type === "state"
       && payload.state
       && onRemoteUpdate
-      && !rejectStaleExtraPeople
-      && (allowByVersion || allowMorePeople)
-      && staleOk;
+      && !staleWhileBotPending;
 
     if (shouldApplyState) {
       onRemoteUpdate(payload.state, remoteVersion);
@@ -371,16 +408,56 @@
     });
   }
 
+  async function publishPinnedState(localState) {
+    const code = getFamilyCode();
+    const revision = Number(localStorage.getItem(LOCAL_VERSION_KEY) || Date.now());
+    const payload = {
+      type: "state",
+      familyCode: code,
+      revision,
+      state: localState,
+      botExport: null,
+      atMs: revision,
+    };
+    const caption = `FC_STATE:${code}:${revision}`;
+    const data = await uploadEncryptedFile(payload, caption);
+    const msgId = data?.result?.message_id;
+    if (!msgId) return;
+    const chatId = getChatId();
+    try {
+      await tgPostJson("unpinAllChatMessages", { chat_id: chatId });
+    } catch (error) {
+      console.warn("unpinAllChatMessages", error);
+    }
+    await tgPostJson("pinChatMessage", {
+      chat_id: chatId,
+      message_id: msgId,
+      disable_notification: true,
+    });
+  }
+
   async function pushToTelegram(localState, botExport) {
     const code = getFamilyCode();
     const revision = Date.now();
+
+    let stateToPush = localState;
+    if (!botExport && localState && window.FamilyMerge?.mergeStates) {
+      try {
+        const remote = await downloadPinnedState();
+        if (remote?.payload?.type === "state" && remote.payload.state) {
+          stateToPush = window.FamilyMerge.mergeStates(localState, remote.payload.state);
+        }
+      } catch (error) {
+        console.warn("merge before push", error);
+      }
+    }
 
     const payload = {
       type: "push",
       familyCode: code,
       revision,
       deviceId: getDeviceId(),
-      state: localState,
+      state: stateToPush,
       botExport: botExport || null,
       atMs: revision,
     };
@@ -389,9 +466,21 @@
     await uploadEncryptedFile(payload, caption);
 
     localStorage.setItem(LOCAL_VERSION_KEY, String(revision));
-    localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(revision));
 
-    if (!botExport) return;
+    if (!botExport) {
+      localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
+      try {
+        await publishPinnedState(stateToPush);
+        updateSyncStatus("synced", "Данные в канале");
+      } catch (pinError) {
+        console.warn("publishPinnedState", pinError);
+        updateSyncStatus("online", "Отправлено — ждём слияния…");
+        schedulePostPushPull();
+      }
+      return;
+    }
+
+    localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(revision));
 
     updateSyncStatus("online", "Ожидание ответа бота…");
     startPendingBotPoll();
@@ -467,7 +556,13 @@
 
     syncActive = true;
     onRemoteUpdate = callback;
-    updateSyncStatus("online", "Telegram…");
+    updateSyncStatus("online", "Проверка Telegram…");
+
+    testTelegramConnection().then((result) => {
+      if (!result.ok) {
+        updateSyncStatus("offline", `Telegram: ${result.error}`);
+      }
+    });
 
     const runInitialPull = () => {
       pullFromTelegram().finally(() => {
@@ -501,7 +596,11 @@
   }
 
   function push(localState) {
-    if (!isSyncReady()) return;
+    if (!isSyncReady()) {
+      const reason = getSyncBlockedReason();
+      if (reason) updateSyncStatus("local", reason);
+      return;
+    }
     const pendingBotRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
     if (pendingBotRev > 0) return;
     clearTimeout(pushTimer);
@@ -521,25 +620,25 @@
       updateSyncStatus("synced", "Синхронизировано");
     }).catch((error) => {
       console.warn("tg push", error);
-      updateSyncStatus("offline", "Ошибка Telegram");
+      const msg = error?.message || "ошибка";
+      updateSyncStatus("offline", `Telegram: ${msg}`);
     });
   }
 
   function pushImmediate(localState) {
-    if (!isSyncReady()) return Promise.resolve();
+    if (!isSyncReady()) {
+      const reason = getSyncBlockedReason() || "Синхронизация не готова";
+      updateSyncStatus("local", reason);
+      return Promise.reject(new Error(reason));
+    }
     const pendingBotRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
     if (pendingBotRev > 0) return Promise.resolve();
     cancelPendingPush();
-    if (!isNetworkAvailable()) {
-      updateSyncStatus("offline", "Офлайн");
-      return Promise.reject(new Error("offline"));
-    }
     updateSyncStatus("online", "Отправка…");
-    return pushToTelegram(localState, null).then(() => {
-      updateSyncStatus("synced", "Синхронизировано");
-    }).catch((error) => {
+    return pushToTelegram(localState, null).catch((error) => {
       console.warn("tg push immediate", error);
-      updateSyncStatus("offline", "Ошибка Telegram");
+      const msg = error?.message || "ошибка";
+      updateSyncStatus("offline", `Telegram: ${msg}`);
       throw error;
     });
   }
@@ -562,12 +661,22 @@
     return pushToTelegram(localState, botExport);
   }
 
+  function ensureFamilyCodeStored() {
+    if (localStorage.getItem(FAMILY_CODE_KEY)) return;
+    const fromCfg = String(cfg.familyCode || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (fromCfg.length >= 4) setFamilyCode(fromCfg);
+  }
+
+  ensureFamilyCodeStored();
+
   const baseMerge = window.FamilySync?.mergeStates;
 
   window.FamilySync = {
     isConfigured,
     isSyncReady,
     isNetworkAvailable,
+    getSyncBlockedReason,
+    testTelegramConnection,
     getSyncMode: () => "telegram",
     getBotToken,
     setBotToken,
