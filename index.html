@@ -9,9 +9,44 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="styles.css?v=60">
+    <link rel="stylesheet" href="styles.css?v=61">
   </head>
   <body>
+    <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
+      <div class="boot-error-card">
+        <strong id="bootErrorTitle">Загрузка приложения…</strong>
+        <span class="boot-error-hint">Если ошибка — текст появится ниже</span>
+        <pre id="bootErrorLog" class="boot-error-log"></pre>
+      </div>
+    </div>
+    <script>
+      (function () {
+        function bootLog(line) {
+          var log = document.getElementById("bootErrorLog");
+          var screen = document.getElementById("bootErrorScreen");
+          var title = document.getElementById("bootErrorTitle");
+          if (screen) {
+            screen.classList.add("boot-error-screen--error");
+            screen.classList.remove("boot-error-screen--loading");
+          }
+          if (title && title.textContent.indexOf("Ошибка") === -1) {
+            title.textContent = "Ошибка запуска";
+          }
+          if (log) log.textContent += line + "\n";
+        }
+        window.__bootLog = bootLog;
+        window.addEventListener("error", function (event) {
+          bootLog(event.message || "ошибка JavaScript");
+          if (event.error && event.error.stack) bootLog(event.error.stack);
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          bootLog(String(event.reason && event.reason.message ? event.reason.message : event.reason));
+        });
+        window.__scriptFailed = function (src) {
+          bootLog("Не загрузился файл: " + src);
+        };
+      })();
+    </script>
     <div class="bot-pending-banner" id="botPendingBanner" hidden>
       Запрос в бот отложен — подключитесь к интернету
     </div>
@@ -328,12 +363,12 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=60"></script>
-    <script src="telegram-config.js?v=60"></script>
-    <script src="telegram-crypto.js?v=60"></script>
-    <script src="sync-merge.js?v=60"></script>
-    <script src="sync.js?v=60"></script>
-    <script src="sync-telegram.js?v=60"></script>
-    <script src="app.js?v=60" defer></script>
+    <script src="server-config.js?v=61" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=61" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="telegram-crypto.js?v=61" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=61" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=61" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=61" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="app.js?v=61" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
