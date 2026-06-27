@@ -11,7 +11,7 @@ const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "68";
+const APP_BUILD = "69";
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -241,6 +241,10 @@ function initFamilySync() {
     const normalizedRemote = applyDeletedPersonFilter(
       normalizeLoadedState(filterRemotePeople(mergedState)),
     );
+    if (shouldReplaceWithRemoteWipe(localBefore, normalizedRemote)) {
+      applyRemoteStateAsReplace(normalizedRemote, 0);
+      return;
+    }
     applySyncMetaFromRemote(normalizedRemote);
     state = applyDeletedPersonFilter(normalizeLoadedState(normalizedRemote));
     state = mergePeoplePreservingLocalEdits(localBefore, normalizedRemote, state);
@@ -263,7 +267,7 @@ function initFamilySync() {
   FamilySync.onBotExportRemote = handleRemoteBotExport;
   FamilySync.onOnline = () => {
     retryBotExportIfNeeded();
-    if (!hasBotPendingSync() && FamilySync.isSyncReady()) {
+    if (!hasBotPendingSync() && FamilySync.isSyncReady() && hasLocalAppData(state)) {
       FamilySync.push(state);
     }
   };
@@ -307,6 +311,7 @@ function startCloudSync() {
   if (started && FamilySync.isConfigured()) {
     setTimeout(() => {
       if (hasBotPendingSync()) return;
+      if (!hasLocalAppData(state)) return;
       if (window.FamilySync?.push) FamilySync.push(state);
     }, 800);
   }
@@ -317,8 +322,12 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   const normalizedRemote = applyDeletedPersonFilter(
     normalizeLoadedState(filterRemotePeople(remoteState)),
   );
-  applySyncMetaFromRemote(normalizedRemote);
   const localBefore = applyDeletedPersonFilter(normalizeLoadedState(state));
+  if (shouldReplaceWithRemoteWipe(localBefore, normalizedRemote)) {
+    applyRemoteStateAsReplace(normalizedRemote, remoteVersion);
+    return;
+  }
+  applySyncMetaFromRemote(normalizedRemote);
   state = applyDeletedPersonFilter(
     normalizeLoadedState(FamilySync.mergeStates(localBefore, normalizedRemote)),
   );
@@ -797,9 +806,40 @@ function getDefaultState() {
     singleFilterMode: false,
     botGroupId: null,
     uiUpdatedAt: 0,
+    wipedAtMs: 0,
     deletedPersonIds: [],
     deletedFolderIds: [],
   };
+}
+
+function hasLocalAppData(appState) {
+  const deleted = getDeletedPersonIdsFrom(appState);
+  const people = (appState?.people || []).filter((person) => !deleted.has(person.id));
+  return people.length > 0 || (appState?.history || []).length > 0;
+}
+
+function shouldReplaceWithRemoteWipe(localState, remoteState) {
+  const remoteWipe = Number(remoteState?.wipedAtMs || 0);
+  const localWipe = Number(localState?.wipedAtMs || 0);
+  return remoteWipe > 0 && remoteWipe >= localWipe;
+}
+
+function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
+  state = applyDeletedPersonFilter(
+    applyDeletedFolderFilter(normalizeLoadedState(filterRemotePeople(normalizedRemote))),
+  );
+  state.deletedPersonIds = [...(state.deletedPersonIds || [])];
+  state.deletedFolderIds = [...(state.deletedFolderIds || [])];
+  localStorage.setItem(DELETED_PERSON_IDS_KEY, JSON.stringify(state.deletedPersonIds));
+  localStorage.setItem(DELETED_FOLDER_IDS_KEY, JSON.stringify(state.deletedFolderIds));
+  applySyncMetaFromRemote(state);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
+  if (remoteVersion > 0) {
+    localStorage.setItem("family-counter-local-version", String(remoteVersion));
+    localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
+  }
+  render();
 }
 
 const WIPE_STORAGE_KEYS = [
@@ -816,11 +856,6 @@ const WIPE_STORAGE_KEYS = [
   LOCAL_PUSH_REVISION_KEY,
   BOT_SENT_REVISIONS_KEY,
   "family-counter-local-version",
-  "family-counter-family-code",
-  "family-counter-telegram-token",
-  "family-counter-telegram-chat",
-  "family-counter-telegram-secret",
-  "family-counter-server-url",
 ];
 
 function wipeAllAppData(options = {}) {
@@ -832,6 +867,7 @@ function wipeAllAppData(options = {}) {
 
   WIPE_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
   state = getDefaultState();
+  state.wipedAtMs = Date.now();
   state.uiUpdatedAt = Date.now();
   editingPersonId = null;
   currentOperation = null;
@@ -839,13 +875,12 @@ function wipeAllAppData(options = {}) {
   render();
 
   if (pushToCloud && window.FamilySync) {
-    markLocalEditPending();
     if (FamilySync.pushImmediate) {
-      FamilySync.pushImmediate(state)
+      FamilySync.pushImmediate(state, { replaceRemote: true })
         .then(() => alert("Данные очищены и отправлены в облако Telegram."))
         .catch(() => alert("Данные очищены на телефоне. Облако: нет сети или ошибка отправки."));
     } else if (FamilySync.push) {
-      FamilySync.push(state);
+      FamilySync.push(state, { replaceRemote: true });
       alert("Данные очищены и отправлены в облако Telegram.");
     }
   } else {
