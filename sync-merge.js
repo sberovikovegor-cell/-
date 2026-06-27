@@ -158,7 +158,23 @@
   }
 
   function mergeStates(localState, remoteState) {
-    const folders = mergeFolders(localState?.folders, remoteState?.folders);
+    const deletedPersonIds = [
+      ...new Set([
+        ...(localState?.deletedPersonIds || []),
+        ...(remoteState?.deletedPersonIds || []),
+      ]),
+    ].filter(Boolean);
+    const deletedFolderIds = [
+      ...new Set([
+        ...(localState?.deletedFolderIds || []),
+        ...(remoteState?.deletedFolderIds || []),
+      ]),
+    ].filter(Boolean);
+    const deletedPersonSet = new Set(deletedPersonIds);
+    const deletedFolderSet = new Set(deletedFolderIds);
+
+    let folders = mergeFolders(localState?.folders, remoteState?.folders)
+      .filter((folder) => !deletedFolderSet.has(folder.id));
     const folderIds = new Set(folders.map((f) => f.id));
     const history = mergeHistory(localState?.history, remoteState?.history);
     let people = mergePeople(localState?.people, remoteState?.people);
@@ -182,30 +198,25 @@
     botGroupId = botGroupId != null && botGroupId !== "" ? Number(botGroupId) : null;
     if (!Number.isFinite(botGroupId)) botGroupId = null;
 
-    const remoteActive = remoteState?.activeFolderIds || [];
-    const localActive = localState?.activeFolderIds || [];
-    const remoteFiltered = remoteActive.filter((id) => folderIds.has(id));
-    const activeFolderIds = remoteFiltered.length
-      ? remoteFiltered
-      : (localActive || []).filter((id) => folderIds.has(id));
-
-    const activeFirstNames = [
-      ...new Set([...(localState?.activeFirstNames || []), ...(remoteState?.activeFirstNames || [])]),
-    ].filter((name) => peopleFirstNames.has(name));
-
-    const deletedPersonIds = [
-      ...new Set([
-        ...(localState?.deletedPersonIds || []),
-        ...(remoteState?.deletedPersonIds || []),
-      ]),
-    ].filter(Boolean);
-    const deletedSet = new Set(deletedPersonIds);
-    if (deletedSet.size) {
-      people = people.filter((person) => !deletedSet.has(person.id));
-    }
+    const remoteActive = (remoteState?.activeFolderIds || []).filter((id) => folderIds.has(id));
+    const localActive = (localState?.activeFolderIds || []).filter((id) => folderIds.has(id));
+    const localNames = (localState?.activeFirstNames || []).filter((name) => peopleFirstNames.has(name));
+    const remoteNames = (remoteState?.activeFirstNames || []).filter((name) => peopleFirstNames.has(name));
 
     const localUi = Number(localState?.uiUpdatedAt || 0);
     const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
+
+    const activeFolderIds = remoteUi > localUi
+      ? (remoteActive.length ? remoteActive : localActive)
+      : localActive;
+
+    const activeFirstNames = remoteUi > localUi
+      ? (remoteNames.length ? remoteNames : localNames)
+      : localNames;
+
+    if (deletedPersonSet.size) {
+      people = people.filter((person) => !deletedPersonSet.has(person.id));
+    }
 
     return {
       people,
@@ -219,6 +230,7 @@
       botGroupId,
       uiUpdatedAt: Math.max(localUi, remoteUi),
       deletedPersonIds,
+      deletedFolderIds,
     };
   }
 
