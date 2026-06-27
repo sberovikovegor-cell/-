@@ -370,8 +370,13 @@
       localAppState = null;
     }
     const rejectStaleWipe = localAppState && payload.state
-      && Number(localAppState.wipedAtMs || 0) > 0
-      && Number(localAppState.wipedAtMs || 0) > Number(payload.state.wipedAtMs || 0);
+      && (
+        (Number(localAppState.wipedAtMs || 0) > 0
+          && Number(localAppState.wipedAtMs || 0) > Number(payload.state.wipedAtMs || 0))
+        || (Number(localStorage.getItem("family-counter-cloud-wipe-at") || 0) > 0
+          && Number(localStorage.getItem("family-counter-cloud-wipe-at") || 0)
+            > Number(payload.state.wipedAtMs || 0))
+      );
 
     const shouldApplyState = payload.type === "state"
       && payload.state
@@ -456,13 +461,15 @@
     let stateToPush = localState;
     const replaceRemote = Boolean(pushOptions.replaceRemote);
     const localWipe = Number(localState?.wipedAtMs || 0);
+    const cloudWipe = Number(localStorage.getItem("family-counter-cloud-wipe-at") || 0);
+    const effectiveLocalWipe = Math.max(localWipe, cloudWipe);
     if (!botExport && !replaceRemote && localState && window.FamilyMerge?.mergeStates) {
       try {
         const remote = await downloadPinnedState();
         if (remote?.payload?.type === "state" && remote.payload.state) {
           const remoteState = remote.payload.state;
           const remoteWipe = Number(remoteState?.wipedAtMs || 0);
-          if (localWipe > 0 && localWipe > remoteWipe) {
+          if (effectiveLocalWipe > 0 && effectiveLocalWipe > remoteWipe) {
             stateToPush = localState;
           } else {
             stateToPush = window.FamilyMerge.mergeStates(localState, remoteState);
@@ -679,10 +686,10 @@
     return pushToTelegram(null, botExport);
   }
 
-  function pushWithBotExport(localState, botExport) {
+  function pushWithBotExport(localState, botExport, pushOptions) {
     if (!isSyncReady()) return Promise.reject(new Error("sync not ready"));
     if (!isNetworkAvailable()) return Promise.reject(new Error("offline"));
-    return pushToTelegram(localState, botExport);
+    return pushToTelegram(localState, botExport, pushOptions || { replaceRemote: true });
   }
 
   function ensureFamilyCodeStored() {
