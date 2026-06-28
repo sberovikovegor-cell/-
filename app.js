@@ -12,7 +12,7 @@ const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "73";
+const APP_BUILD = "74";
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -1983,6 +1983,13 @@ function savePerson(event) {
   const runBotSync = () => {
     if (botCheckboxChanged) {
       if (wantInBot) {
+        if (!alertIfBotProfileIncomplete(saved)) {
+          touchPersonUseInBot(saved.id, false);
+          if (elements.personUseInBotCheckbox) elements.personUseInBotCheckbox.checked = false;
+          saveState({ skipPush: true });
+          render();
+          return;
+        }
         touchPersonUseInBot(saved.id, true);
         saveState();
         render();
@@ -2419,6 +2426,22 @@ function getCardNumberForBot(person) {
   return firstLine;
 }
 
+function getMissingBotProfileFields(person) {
+  const missing = [];
+  if (!String(person?.firstName ?? "").trim()) missing.push("Имя");
+  if (!String(person?.lastName ?? "").trim()) missing.push("Фамилия");
+  if (!String(person?.phone ?? "").trim()) missing.push("Номер");
+  if (!getCardNumberForBot(person)) missing.push("Карта");
+  return missing;
+}
+
+function alertIfBotProfileIncomplete(person) {
+  const missing = getMissingBotProfileFields(person);
+  if (!missing.length) return true;
+  alert(`Сначала нужно заполнить недостающие данные: ${missing.join(", ")}.`);
+  return false;
+}
+
 function exportPersonForBot(person) {
   return {
     id: person.id,
@@ -2670,6 +2693,7 @@ function queueBotExportClear(person, options = {}) {
 
 function syncPersonToBot(person) {
   if (!person?.useInBot) return;
+  if (!alertIfBotProfileIncomplete(person)) return;
   if (!canPushBotNow()) {
     markBotPendingForPerson(person.id, "upsert");
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -2720,9 +2744,13 @@ function disablePersonInBot(person) {
 }
 
 function toggleUseInBot(person) {
+  const freshPerson = () => state.people.find((item) => item.id === person.id) || person;
+
   if (person.botPendingSync) {
     if (person.botPendingAction === "clear") {
       const enableInBot = () => {
+        const current = freshPerson();
+        if (!alertIfBotProfileIncomplete(current)) return;
         touchPersonUseInBot(person.id, true);
         markBotPendingForPerson(person.id, "upsert");
         saveState({ skipPush: true });
@@ -2761,6 +2789,8 @@ function toggleUseInBot(person) {
   }
 
   const enableInBot = () => {
+    const current = freshPerson();
+    if (!alertIfBotProfileIncomplete(current)) return;
     touchPersonUseInBot(person.id, true);
     markBotPendingForPerson(person.id, "upsert");
     saveState({ skipPush: true });
