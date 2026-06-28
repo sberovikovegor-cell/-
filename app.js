@@ -25,7 +25,7 @@ const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DATA_EPOCH_KEY = "family-counter-data-epoch";
 const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "76";
+const APP_BUILD = "77";
 
 const SYNC_SETTINGS_KEYS = new Set([
   "family-counter-family-code",
@@ -67,17 +67,23 @@ function enforceDataEpochOnStartup() {
   const stored = Number(localStorage.getItem(DATA_EPOCH_KEY) || 0);
   if (stored >= required) return false;
 
-  clearAllFamilyCounterStorage({ keepSyncSettings: true });
-  const wiped = getDefaultState();
-  wiped.wipedAtMs = Date.now();
-  wiped.dataEpoch = required;
-  wiped.uiUpdatedAt = Date.now();
   localStorage.setItem(DATA_EPOCH_KEY, String(required));
-  localStorage.setItem(CLOUD_WIPE_AT_KEY, String(wiped.wipedAtMs));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(wiped));
-  localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(wiped));
-  localStorage.setItem(FACTORY_RESET_PENDING_KEY, "1");
-  clearAppCaches();
+
+  const upgradeStoredState = (raw) => {
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      parsed.dataEpoch = Math.max(Number(parsed.dataEpoch || 0), required);
+      const json = JSON.stringify(parsed);
+      localStorage.setItem(STORAGE_KEY, json);
+      localStorage.setItem(STORAGE_BACKUP_KEY, json);
+    } catch {
+      // ignore broken storage
+    }
+  };
+  upgradeStoredState(localStorage.getItem(STORAGE_KEY));
+  upgradeStoredState(localStorage.getItem(STORAGE_BACKUP_KEY));
   return true;
 }
 
@@ -141,10 +147,10 @@ const TYPE_LABELS = {
 function showBootError(message) {
   const text = String(message || "ошибка");
   if (window.__bootLog) window.__bootLog(text);
-  const banner = document.querySelector("#syncAlertBanner");
-  if (banner) {
-    banner.hidden = false;
-    banner.textContent = `Ошибка: ${text}`;
+  if (elements.syncNoticeRow && elements.syncNoticeText) {
+    elements.syncNoticeRow.hidden = false;
+    elements.syncNoticeText.textContent = `Ошибка: ${text}`;
+    elements.syncNoticeRow.dataset.level = "error";
   }
 }
 
@@ -271,6 +277,8 @@ const elements = {
   botSuccessBanner: document.querySelector("#botSuccessBanner"),
   botOfflineDialog: document.querySelector("#botOfflineDialog"),
   syncAlertBanner: document.querySelector("#syncAlertBanner"),
+  syncNoticeRow: document.querySelector("#syncNoticeRow"),
+  syncNoticeText: document.querySelector("#syncNoticeText"),
 };
 
 init();
@@ -367,9 +375,6 @@ function initFamilySync() {
     if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
       applySyncMetaFromRemote(normalizedRemote);
       render();
-      if (!hasLocalAppData(localBefore) && !remoteMeetsDataEpoch(normalizedRemote)) {
-        scheduleCloudFactoryResetPush();
-      }
       return;
     }
     applySyncMetaFromRemote(normalizedRemote);
@@ -383,6 +388,7 @@ function initFamilySync() {
     state = applyDeletedFolderFilter(state);
     reconcileDeletedPersonIds(normalizedRemote);
     reconcileDeletedFolderIds(normalizedRemote);
+    state = ensureStateDataEpoch(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
     render();
@@ -394,9 +400,13 @@ function initFamilySync() {
   FamilySync.onBotExportRemote = handleRemoteBotExport;
   FamilySync.onOnline = () => {
     retryBotExportIfNeeded();
-    if (!hasBotPendingSync() && FamilySync.isSyncReady() && hasLocalAppData(state)) {
-      FamilySync.push(state);
+    if (!hasBotPendingSync() && FamilySync.isSyncReady()) {
+      state = ensureStateDataEpoch(state);
+      if (hasLocalAppData(state) || getRequiredDataEpoch() > 0) {
+        FamilySync.push(state);
+      }
     }
+    renderSyncNoticeRow();
   };
 
   const code = FamilySync.getFamilyCode();
@@ -462,9 +472,6 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
     applySyncMetaFromRemote(normalizedRemote);
     render();
-    if (!hasLocalAppData(localBefore) && !remoteMeetsDataEpoch(normalizedRemote)) {
-      scheduleCloudFactoryResetPush();
-    }
     return;
   }
   applySyncMetaFromRemote(normalizedRemote);
@@ -478,6 +485,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = preferLocalFiltersWhenShrunk(localBefore, normalizedRemote, state);
   state = scrubFiltersToPeople(state);
   state = applyDeletedFolderFilter(state);
+  state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
   state.wipedAtMs = Math.max(
@@ -977,11 +985,24 @@ function countActivePeople(appState) {
   return (appState?.people || []).filter((person) => !deleted.has(person.id)).length;
 }
 
+function ensureStateDataEpoch(appState) {
+  const required = getRequiredDataEpoch();
+  if (!required || !appState) return appState;
+  const current = Number(appState.dataEpoch || 0);
+  if (current >= required) return appState;
+  return { ...appState, dataEpoch: required };
+}
+
 function shouldRejectStaleRemoteState(localState, remoteState) {
   const requiredEpoch = getRequiredDataEpoch();
-  if (requiredEpoch > 0 && !remoteMeetsDataEpoch(remoteState)) {
-    if (hasRemoteAppData(remoteState)) return true;
-    if (!hasLocalAppData(localState)) return true;
+  if (requiredEpoch > 0 && !remoteMeetsDataEpoch(remoteState) && hasRemoteAppData(remoteState)) {
+    const remoteWipe = Number(remoteState?.wipedAtMs || 0);
+    const localWipe = Number(localState?.wipedAtMs || 0);
+    const cloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
+    const effectiveLocalWipe = Math.max(localWipe, cloudWipe);
+    if (effectiveLocalWipe > 0 && remoteWipe < effectiveLocalWipe) {
+      return true;
+    }
   }
 
   const localWipe = Number(localState?.wipedAtMs || 0);
@@ -1019,7 +1040,7 @@ function reconcileFiltersAfterSync() {
 
 function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   state = applyDeletedPersonFilter(
-    applyDeletedFolderFilter(normalizeLoadedState(filterRemotePeople(normalizedRemote))),
+    applyDeletedFolderFilter(normalizeLoadedState(filterRemotePeople(ensureStateDataEpoch(normalizedRemote)))),
   );
   state.deletedPersonIds = [...(state.deletedPersonIds || [])];
   state.deletedFolderIds = [...(state.deletedFolderIds || [])];
@@ -1057,6 +1078,7 @@ function wipeAllAppData(options = {}) {
     localStorage.setItem(DATA_EPOCH_KEY, String(requiredEpoch));
   }
   localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
+  localStorage.setItem(FACTORY_RESET_PENDING_KEY, "1");
   editingPersonId = null;
   currentOperation = null;
   saveState({ skipPush: true });
@@ -1115,7 +1137,9 @@ function loadState() {
 
   loaded = migrateDeletedPersonIds(loaded);
   loaded = migrateDeletedFolderIds(loaded);
-  const filtered = applyDeletedPersonFilter(applyDeletedFolderFilter(loaded));
+  const filtered = ensureStateDataEpoch(
+    applyDeletedPersonFilter(applyDeletedFolderFilter(loaded)),
+  );
   const json = JSON.stringify(filtered);
   localStorage.setItem(STORAGE_KEY, json);
   localStorage.setItem(STORAGE_BACKUP_KEY, json);
@@ -1315,18 +1339,44 @@ function renderBotToggleButton(botToggle, person) {
   }
 }
 
-function renderSyncAlertBanner() {
-  if (!elements.syncAlertBanner) return;
+function renderSyncNoticeRow() {
+  const noticeRow = elements.syncNoticeRow;
+  const noticeText = elements.syncNoticeText;
+  if (!noticeRow || !noticeText) return;
+
+  const pending = hasBotPendingSync() && !canPushBotNow();
   const alert = state.syncAlert;
   const health = state.syncHealth;
-  const msg = alert?.message || (health && !health.ok ? health.message : "");
-  if (!msg) {
-    elements.syncAlertBanner.hidden = true;
-    elements.syncAlertBanner.textContent = "";
+  const syncMsg = alert?.message || (health && !health.ok ? health.message : "");
+  const successVisible = elements.botSuccessBanner && !elements.botSuccessBanner.hidden;
+
+  let text = "";
+  let level = "warn";
+  if (pending) {
+    text = "Есть несохранённые данные — подключитесь к сети";
+    level = "warn";
+  } else if (syncMsg) {
+    text = `Синхронизация: ${syncMsg}`;
+    level = alert?.level === "error" || (health && !health.ok) ? "error" : "warn";
+  } else if (successVisible) {
+    text = "Данные успешно отправлены";
+    level = "ok";
+  }
+
+  if (!text) {
+    noticeRow.hidden = true;
+    noticeText.textContent = "";
+    noticeRow.dataset.level = "";
     return;
   }
-  elements.syncAlertBanner.hidden = false;
-  elements.syncAlertBanner.textContent = `⚠️ Синхронизация: ${msg}`;
+
+  noticeRow.hidden = false;
+  noticeText.textContent = text;
+  noticeRow.dataset.level = level;
+}
+
+function renderSyncAlertBanner() {
+  renderSyncNoticeRow();
 }
 
 function applySyncMetaFromRemote(remoteState) {
@@ -1350,6 +1400,7 @@ function applySyncMetaFromRemote(remoteState) {
 }
 
 function saveState(options = {}) {
+  state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
   const json = JSON.stringify(state);
@@ -1369,8 +1420,7 @@ function saveState(options = {}) {
 }
 
 function render() {
-  renderBotPendingBanner();
-  renderSyncAlertBanner();
+  renderSyncNoticeRow();
   renderTotal();
   renderFolders();
   renderFirstNameFilters();
@@ -2411,9 +2461,11 @@ function showBotSyncSuccessMessage() {
   if (!elements.botSuccessBanner) return;
   elements.botSuccessBanner.hidden = false;
   clearTimeout(botSuccessTimer);
+  renderSyncNoticeRow();
   botSuccessTimer = setTimeout(() => {
     if (elements.botSuccessBanner) elements.botSuccessBanner.hidden = true;
-  }, 2000);
+    renderSyncNoticeRow();
+  }, 2800);
 }
 
 function confirmOfflineBotSync() {
@@ -2443,16 +2495,7 @@ function confirmOfflineBotSync() {
 }
 
 function renderBotPendingBanner() {
-  if (!elements.botPendingBanner) return;
-  const pending = hasBotPendingSync();
-  if (!pending || canPushBotNow()) {
-    elements.botPendingBanner.hidden = true;
-    elements.botPendingBanner.textContent = "";
-    return;
-  }
-  elements.botPendingBanner.hidden = false;
-  elements.botPendingBanner.textContent =
-    "Запрос в бот отложен — нужна связь с Telegram (main.py только для бота ПК с картами)";
+  renderSyncNoticeRow();
 }
 
 function cancelBotPendingForPerson(personId) {
