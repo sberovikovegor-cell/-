@@ -5,6 +5,8 @@ window.FAMILY_TELEGRAM_CONFIG = {
   chatId: "-1004291671029",
   familyCode: "12312312",
   syncSecret: "123123123",
+  // Смена номера = полная очистка карт/людей на всех устройствах и в Telegram (ver. 76+)
+  dataEpoch: 76,
   // Если на телефоне блокируют api.telegram.org — укажите прокси (ПК run_app.py:8080 в одной Wi‑Fi):
   // telegramApiBase: "http://192.168.1.100:8080/tg-proxy/api",
 };
