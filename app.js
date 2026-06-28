@@ -25,7 +25,7 @@ const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DATA_EPOCH_KEY = "family-counter-data-epoch";
 const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "77";
+const APP_BUILD = "79";
 
 const SYNC_SETTINGS_KEYS = new Set([
   "family-counter-family-code",
@@ -285,6 +285,9 @@ init();
 
 function init() {
   try {
+    if (window.location.protocol === "file:") {
+      document.body.classList.add("android-webview");
+    }
     renderAppVersion();
     renderAmountButtons();
     bindEvents();
