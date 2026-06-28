@@ -25,7 +25,14 @@ const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DATA_EPOCH_KEY = "family-counter-data-epoch";
 const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "82";
+const SESSION_ACTIVE_KEY = "family-counter-session-active";
+const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
+const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
+const APP_BUILD = "83";
+
+let coldAppLaunch = false;
+let cloudConfirmTimer = null;
+let startupPushScheduled = false;
 
 const SYNC_SETTINGS_KEYS = new Set([
   "family-counter-family-code",
@@ -306,6 +313,7 @@ init();
 
 function init() {
   try {
+    coldAppLaunch = detectColdAppLaunch();
     if (window.location.protocol === "file:") {
       document.body.classList.add("android-webview");
     }
@@ -419,18 +427,40 @@ function initFamilySync() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
     render();
+    tryConfirmCloudSync(state);
     if (hasBotPendingSync() && FamilySync.pullNow) {
       FamilySync.pullNow().catch(() => {});
     }
   };
 
   FamilySync.onBotExportRemote = handleRemoteBotExport;
+  FamilySync.onPushComplete = (success, pushedState) => {
+    if (!success) {
+      localStorage.removeItem(CLOUD_CONFIRM_FP_KEY);
+      renderSyncNoticeRow();
+      return;
+    }
+    if (pushedState) {
+      const fp = stateCloudFingerprint(pushedState);
+      if (fp) localStorage.setItem(CLOUD_CONFIRM_FP_KEY, fp);
+    }
+    if (localStorage.getItem(CLOUD_CONFIRM_FP_KEY) && FamilySync.updateSyncStatus) {
+      FamilySync.updateSyncStatus("online", "Проверка канала…");
+    }
+    scheduleCloudConfirmPoll();
+    renderSyncNoticeRow();
+  };
+  FamilySync.onBeforeSyncedStatus = () => Boolean(localStorage.getItem(CLOUD_CONFIRM_FP_KEY));
+
   FamilySync.onOnline = () => {
     retryBotExportIfNeeded();
     if (!hasBotPendingSync() && FamilySync.isSyncReady()) {
       state = ensureStateDataEpoch(state);
-      if (hasLocalAppData(state) || getRequiredDataEpoch() > 0) {
+      const offlinePending = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
+      if (offlinePending) {
         FamilySync.push(state);
+      } else if (coldAppLaunch && !isStartupPushDone()) {
+        scheduleStartupCloudPush();
       }
     }
     renderSyncNoticeRow();
@@ -467,6 +497,142 @@ function markLocalEditPending() {
   localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(Date.now()));
 }
 
+function detectColdAppLaunch() {
+  try {
+    if (sessionStorage.getItem(SESSION_ACTIVE_KEY)) return false;
+    sessionStorage.setItem(SESSION_ACTIVE_KEY, "1");
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function isStartupPushDone() {
+  try {
+    return Boolean(sessionStorage.getItem(STARTUP_PUSH_DONE_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function markStartupPushDone() {
+  try {
+    sessionStorage.setItem(STARTUP_PUSH_DONE_KEY, "1");
+  } catch {
+    // ignore sessionStorage errors
+  }
+}
+
+function stateCloudFingerprint(appState) {
+  if (!appState) return "";
+  const normalized = applyDeletedPersonFilter(normalizeLoadedState(appState));
+  const deleted = getDeletedPersonIdsFrom(normalized);
+  const people = (normalized.people || [])
+    .filter((person) => person && !deleted.has(person.id))
+    .map((person) => `${person.id}|${Number(person.balance || 0)}|${getPersonFirstName(person)}|${person.phone || ""}|${getCardNumberForBot(person)}`)
+    .sort()
+    .join(",");
+  const histLen = (normalized.history || []).length;
+  const folders = (normalized.folders || []).length;
+  const ui = Number(normalized.uiUpdatedAt || 0);
+  const wipe = Number(normalized.wipedAtMs || 0);
+  const epoch = Number(normalized.dataEpoch || 0);
+  return `e${epoch}|w${wipe}|u${ui}|p${people}|h${histLen}|f${folders}`;
+}
+
+function tryConfirmCloudSync(remoteState) {
+  const pending = localStorage.getItem(CLOUD_CONFIRM_FP_KEY);
+  if (!pending) return false;
+  const target = remoteState
+    ? applyDeletedPersonFilter(normalizeLoadedState(remoteState))
+    : state;
+  if (stateCloudFingerprint(target) !== pending) return false;
+  localStorage.removeItem(CLOUD_CONFIRM_FP_KEY);
+  if (window.FamilySync?.updateSyncStatus) {
+    FamilySync.updateSyncStatus("synced", "Синхронизировано");
+  }
+  renderSyncNoticeRow();
+  return true;
+}
+
+function scheduleCloudConfirmPoll() {
+  if (!localStorage.getItem(CLOUD_CONFIRM_FP_KEY)) return;
+  if (cloudConfirmTimer) return;
+  const started = Date.now();
+  const tick = async () => {
+    const pending = localStorage.getItem(CLOUD_CONFIRM_FP_KEY);
+    if (!pending) {
+      cloudConfirmTimer = null;
+      return;
+    }
+    if (Date.now() - started > 120000) {
+      if (FamilySync?.updateSyncStatus) {
+        FamilySync.updateSyncStatus("online", "В канале — ПК обновится позже");
+      }
+      cloudConfirmTimer = null;
+      return;
+    }
+    try {
+      if (FamilySync?.pullNow) await FamilySync.pullNow();
+      tryConfirmCloudSync(state);
+    } catch {
+      // ignore pull errors during confirm poll
+    }
+    if (!localStorage.getItem(CLOUD_CONFIRM_FP_KEY)) {
+      cloudConfirmTimer = null;
+      return;
+    }
+    cloudConfirmTimer = setTimeout(tick, 4000);
+  };
+  cloudConfirmTimer = setTimeout(tick, 2500);
+}
+
+function scheduleStartupCloudPush() {
+  if (!coldAppLaunch || isStartupPushDone()) return;
+  if (startupPushScheduled) return;
+  startupPushScheduled = true;
+  if (localStorage.getItem(FACTORY_RESET_PENDING_KEY)) return;
+  if (hasBotPendingSync()) return;
+
+  const attempt = () => {
+    if (!coldAppLaunch || isStartupPushDone()) return;
+    if (!window.FamilySync?.isSyncReady?.()) return;
+    if (!isNetworkAvailable()) {
+      if (FamilySync?.updateSyncStatus) {
+        FamilySync.updateSyncStatus("offline", "Запуск — отправим при сети");
+      }
+      return;
+    }
+    const hasData = hasLocalAppData(state)
+      || Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
+    if (!hasData) {
+      markStartupPushDone();
+      return;
+    }
+    markStartupPushDone();
+    if (FamilySync.pushImmediate) {
+      FamilySync.pushImmediate(state).catch(() => {});
+    } else if (FamilySync.push) {
+      FamilySync.push(state);
+    }
+  };
+
+  setTimeout(() => {
+    attempt();
+    if (isStartupPushDone()) return;
+    let tries = 0;
+    const retryId = setInterval(() => {
+      tries += 1;
+      if (isStartupPushDone() || tries > 20) {
+        clearInterval(retryId);
+        return;
+      }
+      attempt();
+      if (isStartupPushDone()) clearInterval(retryId);
+    }, 2000);
+  }, 4000);
+}
+
 function startCloudSync() {
   if (!window.FamilySync?.initFirebase) return;
 
@@ -474,16 +640,8 @@ function startCloudSync() {
     applyRemoteState(remoteState, remoteVersion ?? 0);
   }, { delayInitialPullMs: 3000 });
 
-  if (started && FamilySync.isConfigured()) {
-    setTimeout(() => {
-      if (localStorage.getItem(FACTORY_RESET_PENDING_KEY)) {
-        flushPendingFactoryResetToCloud();
-        return;
-      }
-      if (hasBotPendingSync()) return;
-      if (!hasLocalAppData(state)) return;
-      if (window.FamilySync?.push) FamilySync.push(state);
-    }, 800);
+  if (started && FamilySync.isConfigured() && coldAppLaunch) {
+    scheduleStartupCloudPush();
   }
 }
 
@@ -539,6 +697,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
     }
   }
   reconcileFiltersAfterSync();
+  tryConfirmCloudSync(state);
   render();
 }
 
@@ -1082,6 +1241,7 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
     localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
   }
   reconcileFiltersAfterSync();
+  tryConfirmCloudSync(state);
   render();
 }
 
@@ -1369,6 +1529,8 @@ function renderSyncNoticeRow() {
   const noticeText = elements.syncNoticeText;
   if (!noticeRow || !noticeText) return;
 
+  const cloudPending = localStorage.getItem(CLOUD_CONFIRM_FP_KEY);
+  const offlineEdits = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
   const pending = hasBotPendingSync() && !canPushBotNow();
   const alert = state.syncAlert;
   const health = state.syncHealth;
@@ -1377,7 +1539,13 @@ function renderSyncNoticeRow() {
 
   let text = "";
   let level = "warn";
-  if (pending) {
+  if (cloudPending) {
+    text = "Проверка синхронизации в канале…";
+    level = "warn";
+  } else if (offlineEdits && !isNetworkAvailable()) {
+    text = "Изменения сохранены — отправим при подключении к сети";
+    level = "warn";
+  } else if (pending) {
     text = "Есть несохранённые данные — подключитесь к сети";
     level = "warn";
   } else if (syncMsg) {
