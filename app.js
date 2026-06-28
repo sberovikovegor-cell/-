@@ -1,3 +1,14 @@
+// Если открыли app.js напрямую (не через index.html) — переход на приложение.
+(function () {
+  const href = String(window.location.href || "");
+  const path = String(window.location.pathname || "");
+  if (/app\.js($|[?#])/i.test(path) || /\/app\.js[?#]/i.test(href)) {
+    const base = href.replace(/app\.js.*$/i, "");
+    window.location.replace(`${base}index.html`);
+    return;
+  }
+})();
+
 const STORAGE_KEY = "family-counter-v1";
 const STORAGE_BACKUP_KEY = "family-counter-v1-backup";
 const BOT_REVISION_KEY = "family-counter-bot-revision";
@@ -12,7 +23,7 @@ const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "74";
+const APP_BUILD = "75";
 
 function blurActiveInput() {
   const active = document.activeElement;
