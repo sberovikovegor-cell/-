@@ -25,7 +25,7 @@ const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DATA_EPOCH_KEY = "family-counter-data-epoch";
 const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "79";
+const APP_BUILD = "82";
 
 const SYNC_SETTINGS_KEYS = new Set([
   "family-counter-family-code",
@@ -125,10 +125,26 @@ function flushPendingFactoryResetToCloud() {
   });
 }
 
-function scheduleCloudFactoryResetPush() {
-  if (!getRequiredDataEpoch()) return;
-  localStorage.setItem(FACTORY_RESET_PENDING_KEY, "1");
-  flushPendingFactoryResetToCloud();
+function scheduleOverwriteStaleCloud() {
+  if (!window.FamilySync?.pushImmediate) return;
+  const required = getRequiredDataEpoch();
+  if (!required) return;
+  const marker = `family-counter-epoch-cloud-${required}`;
+  setTimeout(() => {
+    if (!FamilySync.isSyncReady?.()) return;
+    state = ensureStateDataEpoch(state);
+    FamilySync.pushImmediate(state, { replaceRemote: true })
+      .then(() => localStorage.setItem(marker, String(Date.now())))
+      .catch(() => {});
+  }, 2500);
+}
+
+function scheduleCloudEpochOverwriteOnce() {
+  const required = getRequiredDataEpoch();
+  if (!required) return;
+  const marker = `family-counter-epoch-cloud-${required}`;
+  if (localStorage.getItem(marker)) return;
+  scheduleOverwriteStaleCloud();
 }
 
 function blurActiveInput() {
@@ -166,7 +182,11 @@ window.addEventListener("error", (event) => {
 
 window.addEventListener("unhandledrejection", (event) => {
   console.error(event.reason);
-  showBootError(String(event.reason?.message || event.reason || "ошибка"));
+  const msg = String(event.reason?.message || event.reason || "");
+  if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) {
+    return;
+  }
+  showBootError(msg || "ошибка");
 });
 
 let state;
@@ -188,6 +208,7 @@ let amountChangeStack = [];
 let deferredInstallPrompt = null;
 let activeView = "main";
 let botSuccessTimer = null;
+let botExportWorkerBusy = false;
 let filtersAutoCleared = false;
 
 const elements = {
@@ -377,6 +398,9 @@ function initFamilySync() {
     }
     if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
       applySyncMetaFromRemote(normalizedRemote);
+      if (!remoteMeetsDataEpoch(normalizedRemote)) {
+        scheduleOverwriteStaleCloud();
+      }
       render();
       return;
     }
@@ -425,6 +449,7 @@ function initFamilySync() {
     }
     startCloudSync();
     flushPendingFactoryResetToCloud();
+    scheduleCloudEpochOverwriteOnce();
   } else if (!FamilySync.isConfigured()) {
     FamilySync.updateSyncStatus("local", window.FAMILY_TELEGRAM_CONFIG?.enabled
       ? "Введите код семьи (кнопка ниже)"
@@ -474,6 +499,9 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   }
   if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
     applySyncMetaFromRemote(normalizedRemote);
+    if (!remoteMeetsDataEpoch(normalizedRemote)) {
+      scheduleOverwriteStaleCloud();
+    }
     render();
     return;
   }
@@ -999,13 +1027,7 @@ function ensureStateDataEpoch(appState) {
 function shouldRejectStaleRemoteState(localState, remoteState) {
   const requiredEpoch = getRequiredDataEpoch();
   if (requiredEpoch > 0 && !remoteMeetsDataEpoch(remoteState) && hasRemoteAppData(remoteState)) {
-    const remoteWipe = Number(remoteState?.wipedAtMs || 0);
-    const localWipe = Number(localState?.wipedAtMs || 0);
-    const cloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
-    const effectiveLocalWipe = Math.max(localWipe, cloudWipe);
-    if (effectiveLocalWipe > 0 && remoteWipe < effectiveLocalWipe) {
-      return true;
-    }
+    return true;
   }
 
   const localWipe = Number(localState?.wipedAtMs || 0);
@@ -2714,8 +2736,6 @@ function waitForPersonBotApplied(personId, timeoutMs = 90000) {
     check();
   });
 }
-
-let botExportWorkerBusy = false;
 
 function scheduleBotExportWorker() {
   if (botExportWorkerBusy) return;
