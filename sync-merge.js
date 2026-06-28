@@ -157,7 +157,55 @@
     });
   }
 
+  function getRequiredDataEpoch() {
+    return Number(window.FAMILY_TELEGRAM_CONFIG?.dataEpoch || 0);
+  }
+
+  function remoteMeetsDataEpoch(remoteState) {
+    const required = getRequiredDataEpoch();
+    if (!required) return true;
+    return Number(remoteState?.dataEpoch || 0) >= required;
+  }
+
+  function filterRemoteToKnownIds(remoteState, localState) {
+    if (!remoteState || !localState) return remoteState;
+    const peopleIds = new Set((localState.people || []).map((p) => p.id).filter(Boolean));
+    const historyIds = new Set((localState.history || []).map((h) => h.id).filter(Boolean));
+    const folderIds = new Set((localState.folders || []).map((f) => f.id).filter(Boolean));
+    return {
+      ...remoteState,
+      people: (remoteState.people || []).filter((p) => peopleIds.has(p.id)),
+      history: (remoteState.history || []).filter((h) => historyIds.has(h.id)),
+      folders: (remoteState.folders || []).filter((f) => folderIds.has(f.id)),
+    };
+  }
+
   function mergeStates(localState, remoteState) {
+    const local = localState || {};
+    const remote = remoteState || {};
+    const required = getRequiredDataEpoch();
+    const localWipe = Number(local.wipedAtMs || 0);
+    const remoteWipe = Number(remote.wipedAtMs || 0);
+
+    if (required > 0 && !remoteMeetsDataEpoch(remote)) {
+      return {
+        ...local,
+        dataEpoch: Math.max(Number(local.dataEpoch || 0), required),
+        wipedAtMs: Math.max(localWipe, remoteWipe),
+        deletedPersonIds: [...new Set([...(local.deletedPersonIds || []), ...(remote.deletedPersonIds || [])])],
+        deletedFolderIds: [...new Set([...(local.deletedFolderIds || []), ...(remote.deletedFolderIds || [])])],
+      };
+    }
+
+    if (localWipe > 0 && localWipe > remoteWipe) {
+      const trimmedRemote = filterRemoteToKnownIds(remote, local);
+      return mergeStatesCore(local, trimmedRemote);
+    }
+
+    return mergeStatesCore(local, remote);
+  }
+
+  function mergeStatesCore(localState, remoteState) {
     const deletedPersonIds = [
       ...new Set([
         ...(localState?.deletedPersonIds || []),
@@ -218,6 +266,13 @@
       people = people.filter((person) => !deletedPersonSet.has(person.id));
     }
 
+    const required = getRequiredDataEpoch();
+    const dataEpoch = Math.max(
+      Number(localState?.dataEpoch || 0),
+      Number(remoteState?.dataEpoch || 0),
+      required,
+    );
+
     return {
       people,
       history,
@@ -229,6 +284,11 @@
         : Boolean(localState?.singleFilterMode),
       botGroupId,
       uiUpdatedAt: Math.max(localUi, remoteUi),
+      wipedAtMs: Math.max(
+        Number(localState?.wipedAtMs || 0),
+        Number(remoteState?.wipedAtMs || 0),
+      ),
+      dataEpoch,
       deletedPersonIds,
       deletedFolderIds,
     };
