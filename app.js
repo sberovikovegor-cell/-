@@ -22,8 +22,108 @@ const DELETED_PERSON_IDS_KEY = "family-counter-deleted-person-ids";
 const DELETED_FOLDER_IDS_KEY = "family-counter-deleted-folder-ids";
 const BOT_SENT_REVISIONS_KEY = "family-counter-bot-sent-revisions";
 const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
+const DATA_EPOCH_KEY = "family-counter-data-epoch";
+const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
-const APP_BUILD = "75";
+const APP_BUILD = "76";
+
+const SYNC_SETTINGS_KEYS = new Set([
+  "family-counter-family-code",
+  "family-counter-telegram-token",
+  "family-counter-telegram-chat",
+  "family-counter-telegram-secret",
+  "family-counter-server-url",
+  DEVICE_ID_KEY,
+]);
+
+function getRequiredDataEpoch() {
+  return Number(window.FAMILY_TELEGRAM_CONFIG?.dataEpoch || 0);
+}
+
+function clearAllFamilyCounterStorage(options = {}) {
+  const keepSync = Boolean(options.keepSyncSettings);
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith("family-counter-")) continue;
+    if (keepSync && SYNC_SETTINGS_KEYS.has(key)) continue;
+    keysToRemove.push(key);
+  }
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
+}
+
+function clearAppCaches() {
+  if (!("caches" in window)) return Promise.resolve();
+  return caches.keys()
+    .then((keys) => Promise.all(
+      keys.filter((key) => key.startsWith("family-counter-cache-")).map((key) => caches.delete(key)),
+    ))
+    .catch(() => {});
+}
+
+function enforceDataEpochOnStartup() {
+  const required = getRequiredDataEpoch();
+  if (!required) return false;
+  const stored = Number(localStorage.getItem(DATA_EPOCH_KEY) || 0);
+  if (stored >= required) return false;
+
+  clearAllFamilyCounterStorage({ keepSyncSettings: true });
+  const wiped = getDefaultState();
+  wiped.wipedAtMs = Date.now();
+  wiped.dataEpoch = required;
+  wiped.uiUpdatedAt = Date.now();
+  localStorage.setItem(DATA_EPOCH_KEY, String(required));
+  localStorage.setItem(CLOUD_WIPE_AT_KEY, String(wiped.wipedAtMs));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(wiped));
+  localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(wiped));
+  localStorage.setItem(FACTORY_RESET_PENDING_KEY, "1");
+  clearAppCaches();
+  return true;
+}
+
+function remoteMeetsDataEpoch(remoteState) {
+  const required = getRequiredDataEpoch();
+  if (!required) return true;
+  return Number(remoteState?.dataEpoch || 0) >= required;
+}
+
+function hasRemoteAppData(remoteState) {
+  const deleted = getDeletedPersonIdsFrom(remoteState);
+  const people = (remoteState?.people || []).filter((person) => !deleted.has(person.id));
+  return people.length > 0 || (remoteState?.history || []).length > 0;
+}
+
+function flushPendingFactoryResetToCloud() {
+  if (!localStorage.getItem(FACTORY_RESET_PENDING_KEY)) return;
+  if (!window.FamilySync?.isSyncReady?.()) return;
+
+  const required = getRequiredDataEpoch();
+  state = normalizeLoadedState(state);
+  if (required > 0) state.dataEpoch = required;
+  if (!state.wipedAtMs) state.wipedAtMs = Date.now();
+  state.uiUpdatedAt = Date.now();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
+  localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
+  if (required > 0) localStorage.setItem(DATA_EPOCH_KEY, String(required));
+
+  if (!FamilySync.pushImmediate) {
+    FamilySync.push(state, { replaceRemote: true });
+    localStorage.removeItem(FACTORY_RESET_PENDING_KEY);
+    return;
+  }
+
+  localStorage.removeItem(FACTORY_RESET_PENDING_KEY);
+  FamilySync.pushImmediate(state, { replaceRemote: true }).catch(() => {
+    localStorage.setItem(FACTORY_RESET_PENDING_KEY, "1");
+  });
+}
+
+function scheduleCloudFactoryResetPush() {
+  if (!getRequiredDataEpoch()) return;
+  localStorage.setItem(FACTORY_RESET_PENDING_KEY, "1");
+  flushPendingFactoryResetToCloud();
+}
 
 function blurActiveInput() {
   const active = document.activeElement;
@@ -65,6 +165,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 let state;
 try {
+  enforceDataEpochOnStartup();
   state = loadState();
   if (state.wipedAtMs > 0) {
     const prevCloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
@@ -266,6 +367,9 @@ function initFamilySync() {
     if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
       applySyncMetaFromRemote(normalizedRemote);
       render();
+      if (!hasLocalAppData(localBefore) && !remoteMeetsDataEpoch(normalizedRemote)) {
+        scheduleCloudFactoryResetPush();
+      }
       return;
     }
     applySyncMetaFromRemote(normalizedRemote);
@@ -307,6 +411,7 @@ function initFamilySync() {
       elements.serverUrlInput.value = FamilySync.getServerUrl() || "";
     }
     startCloudSync();
+    flushPendingFactoryResetToCloud();
   } else if (!FamilySync.isConfigured()) {
     FamilySync.updateSyncStatus("local", window.FAMILY_TELEGRAM_CONFIG?.enabled
       ? "Введите код семьи (кнопка ниже)"
@@ -333,6 +438,10 @@ function startCloudSync() {
 
   if (started && FamilySync.isConfigured()) {
     setTimeout(() => {
+      if (localStorage.getItem(FACTORY_RESET_PENDING_KEY)) {
+        flushPendingFactoryResetToCloud();
+        return;
+      }
       if (hasBotPendingSync()) return;
       if (!hasLocalAppData(state)) return;
       if (window.FamilySync?.push) FamilySync.push(state);
@@ -353,6 +462,9 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
     applySyncMetaFromRemote(normalizedRemote);
     render();
+    if (!hasLocalAppData(localBefore) && !remoteMeetsDataEpoch(normalizedRemote)) {
+      scheduleCloudFactoryResetPush();
+    }
     return;
   }
   applySyncMetaFromRemote(normalizedRemote);
@@ -831,6 +943,7 @@ function bindEvents() {
 }
 
 function getDefaultState() {
+  const requiredEpoch = getRequiredDataEpoch();
   return {
     people: [],
     history: [],
@@ -841,6 +954,7 @@ function getDefaultState() {
     botGroupId: null,
     uiUpdatedAt: 0,
     wipedAtMs: 0,
+    dataEpoch: requiredEpoch > 0 ? requiredEpoch : 0,
     deletedPersonIds: [],
     deletedFolderIds: [],
   };
@@ -864,6 +978,12 @@ function countActivePeople(appState) {
 }
 
 function shouldRejectStaleRemoteState(localState, remoteState) {
+  const requiredEpoch = getRequiredDataEpoch();
+  if (requiredEpoch > 0 && !remoteMeetsDataEpoch(remoteState)) {
+    if (hasRemoteAppData(remoteState)) return true;
+    if (!hasLocalAppData(localState)) return true;
+  }
+
   const localWipe = Number(localState?.wipedAtMs || 0);
   const remoteWipe = Number(remoteState?.wipedAtMs || 0);
   const cloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
@@ -919,22 +1039,6 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   render();
 }
 
-const WIPE_STORAGE_KEYS = [
-  STORAGE_KEY,
-  STORAGE_BACKUP_KEY,
-  DELETED_PERSON_IDS_KEY,
-  DELETED_FOLDER_IDS_KEY,
-  BOT_REVISION_KEY,
-  PENDING_BOT_REVISION_KEY,
-  BOT_EXPORT_SENT_REVISION_KEY,
-  LAST_APPLIED_BOT_REVISION_KEY,
-  PENDING_BOT_AT_KEY,
-  LAST_BOT_APPLY_KEY,
-  LOCAL_PUSH_REVISION_KEY,
-  BOT_SENT_REVISIONS_KEY,
-  "family-counter-local-version",
-];
-
 function wipeAllAppData(options = {}) {
   const pushToCloud = Boolean(options.pushToCloud);
   const message = pushToCloud
@@ -942,10 +1046,16 @@ function wipeAllAppData(options = {}) {
     : "Удалить ВСЕ данные только на этом телефоне? (Карты, банки, история, фильтры)";
   if (!confirm(message)) return;
 
-  WIPE_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+  clearAllFamilyCounterStorage({ keepSyncSettings: true });
+  clearAppCaches();
   state = getDefaultState();
   state.wipedAtMs = Date.now();
   state.uiUpdatedAt = Date.now();
+  const requiredEpoch = getRequiredDataEpoch();
+  if (requiredEpoch > 0) {
+    state.dataEpoch = requiredEpoch;
+    localStorage.setItem(DATA_EPOCH_KEY, String(requiredEpoch));
+  }
   localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
   editingPersonId = null;
   currentOperation = null;
@@ -1074,6 +1184,7 @@ function normalizeLoadedState(parsed) {
     botGroupId: Number.isFinite(botGroupId) ? botGroupId : null,
     uiUpdatedAt: Number(withTombstones.uiUpdatedAt || 0),
     wipedAtMs: Number(withTombstones.wipedAtMs || 0),
+    dataEpoch: Number(withTombstones.dataEpoch || 0),
     syncAlert: withTombstones.syncAlert || null,
     syncHealth: withTombstones.syncHealth || null,
     deletedPersonIds: Array.isArray(withTombstones.deletedPersonIds)
