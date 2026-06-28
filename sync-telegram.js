@@ -464,8 +464,12 @@
         const remote = await downloadPinnedState();
         if (remote?.payload?.type === "state" && remote.payload.state) {
           const remoteState = remote.payload.state;
+          const requiredEpoch = Number(cfg.dataEpoch || 0);
+          const remoteEpoch = Number(remoteState?.dataEpoch || 0);
           const remoteWipe = Number(remoteState?.wipedAtMs || 0);
-          if (effectiveLocalWipe > 0 && effectiveLocalWipe > remoteWipe) {
+          if (requiredEpoch > 0 && remoteEpoch < requiredEpoch) {
+            stateToPush = localState;
+          } else if (effectiveLocalWipe > 0 && effectiveLocalWipe > remoteWipe) {
             stateToPush = localState;
           } else {
             stateToPush = window.FamilyMerge.mergeStates(localState, remoteState);
