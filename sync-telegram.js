@@ -465,11 +465,20 @@
         if (remote?.payload?.type === "state" && remote.payload.state) {
           const remoteState = remote.payload.state;
           const remoteWipe = Number(remoteState?.wipedAtMs || 0);
-          if (effectiveLocalWipe > 0 && effectiveLocalWipe > remoteWipe) {
+          const requiredEpoch = Number(cfg.dataEpoch || 0);
+          const remoteEpoch = Number(remoteState?.dataEpoch || 0);
+          const staleRemoteEpoch = requiredEpoch > 0 && remoteEpoch < requiredEpoch;
+
+          if (staleRemoteEpoch || (effectiveLocalWipe > 0 && effectiveLocalWipe > remoteWipe)) {
             stateToPush = localState;
+            if (requiredEpoch > 0 && stateToPush) {
+              const epoch = Math.max(Number(stateToPush.dataEpoch || 0), requiredEpoch);
+              if (epoch > Number(stateToPush.dataEpoch || 0)) {
+                stateToPush = { ...stateToPush, dataEpoch: epoch };
+              }
+            }
           } else {
             stateToPush = window.FamilyMerge.mergeStates(localState, remoteState);
-            const requiredEpoch = Number(cfg.dataEpoch || 0);
             if (requiredEpoch > 0 && stateToPush) {
               const epoch = Math.max(
                 Number(stateToPush.dataEpoch || 0),
