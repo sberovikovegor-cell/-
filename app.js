@@ -29,7 +29,7 @@ const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "166";
+const APP_BUILD = "167";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -152,6 +152,7 @@ function flushPendingFactoryResetToCloud() {
 }
 
 function scheduleOverwriteStaleCloud() {
+  if (!hasLocalAppData(state)) return;
   if (!window.FamilySync?.pushImmediate) return;
   const required = getRequiredDataEpoch();
   if (!required) return;
@@ -662,6 +663,10 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
     normalizeLoadedState(filterRemotePeople(remoteState)),
   );
   const localBefore = applyDeletedPersonFilter(normalizeLoadedState(state));
+  if (!hasLocalAppData(localBefore) && hasRemoteAppData(normalizedRemote)) {
+    applyRemoteStateAsReplace(normalizedRemote, remoteVersion);
+    return;
+  }
   if (shouldReplaceWithRemoteWipe(localBefore, normalizedRemote)) {
     applyRemoteStateAsReplace(normalizedRemote, remoteVersion);
     return;
@@ -1385,6 +1390,9 @@ function ensureStateDataEpoch(appState) {
 }
 
 function shouldRejectStaleRemoteState(localState, remoteState) {
+  if (!hasLocalAppData(localState) && hasRemoteAppData(remoteState)) {
+    return false;
+  }
   const requiredEpoch = getRequiredDataEpoch();
   if (requiredEpoch > 0 && !remoteMeetsDataEpoch(remoteState) && hasRemoteAppData(remoteState)) {
     return true;
@@ -1445,6 +1453,7 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
   if (remoteVersion > 0) {
     localStorage.setItem("family-counter-local-version", String(remoteVersion));
+    localStorage.setItem(APPLIED_REMOTE_PULL_KEY, String(remoteVersion));
     localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
   }
   reconcileFiltersAfterSync();
@@ -1675,6 +1684,8 @@ function sanitizeStateForCloud(appState) {
 
 window.sanitizeStateForCloud = sanitizeStateForCloud;
 window.enforceLocalPeopleOrderOnPush = enforceLocalPeopleOrderOnPush;
+window.hasLocalAppData = hasLocalAppData;
+window.hasRemoteAppData = hasRemoteAppData;
 
 function reconcileBotPendingFromRemote(normalizedRemote) {
   if (!hasBotPendingSync() || !normalizedRemote) return;
