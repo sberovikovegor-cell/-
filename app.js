@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "98";
+const APP_BUILD = "106";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -1814,7 +1814,8 @@ function buildPersonCard(person, stats, detailed) {
       <button type="button" class="copy-chip" data-copy="full">Все данные</button>
     </div>`
     : "";
-  card.innerHTML = `
+  card.innerHTML = detailed
+    ? `
     <div class="person-head-row">
       <div class="person-line person-line-head">
         <div class="person-name">
@@ -1822,7 +1823,6 @@ function buildPersonCard(person, stats, detailed) {
           <button type="button" class="person-name-part person-last-name" data-action="edit"></button>
         </div>
       </div>
-      ${topActionsHtml}
     </div>
     <div class="person-line person-line-balance">
       <span class="person-balance"></span>
@@ -1833,8 +1833,26 @@ function buildPersonCard(person, stats, detailed) {
     <div class="person-line person-line-stats">
       <span class="person-stats-line"></span>
     </div>
-    ${detailsBlock}
-  `;
+    ${detailsBlock}`
+    : `
+    <div class="person-card-top">
+      <div class="person-line person-line-head">
+        <div class="person-name">
+          <button type="button" class="person-name-part person-first-name" data-action="edit"></button>
+          <button type="button" class="person-name-part person-last-name" data-action="edit"></button>
+        </div>
+      </div>
+      <div class="person-line person-line-balance">
+        <span class="person-balance"></span>
+        <span class="row-sep">·</span>
+        <span class="last-income"></span>
+        <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
+      </div>
+      ${topActionsHtml}
+    </div>
+    <div class="person-line person-line-stats">
+      <span class="person-stats-line"></span>
+    </div>`;
   const firstName = getPersonFirstName(person);
   const lastName = getPersonLastName(person);
   const firstNameBtn = card.querySelector(".person-first-name");
