@@ -133,9 +133,12 @@
   }
 
   function isNetworkAvailable() {
-    if (navigator.onLine) return true;
-    if (window.location.protocol === "file:") return true;
-    return false;
+    if (typeof navigator.onLine === "boolean") return navigator.onLine;
+    return true;
+  }
+
+  function hasLocalUnsyncedEdits() {
+    return Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
   }
 
   function schedulePostPushPull() {
@@ -143,8 +146,10 @@
       setTimeout(() => {
         if (!isSyncReady() || !isNetworkAvailable()) return;
         pullFromTelegram()
-          .then((pulled) => {
-            if (pulled) safeSyncedStatus("Синхронизировано");
+          .then((result) => {
+            if (result?.applied || (result?.ok && !hasLocalUnsyncedEdits())) {
+              safeSyncedStatus("Синхронизировано");
+            }
           })
           .catch(() => {});
       }, ms);
@@ -153,6 +158,7 @@
 
   function safeSyncedStatus(message) {
     if (onBeforeSyncedStatus?.()) return;
+    if (hasLocalUnsyncedEdits()) return;
     updateSyncStatus("synced", message);
   }
 
@@ -412,11 +418,9 @@
     if (shouldApplyState) {
       onRemoteUpdate(payload.state, remoteVersion);
     }
+    let stateApplied = Boolean(shouldApplyState);
     if (remoteVersion >= localVersion && !rejectStaleWipe) {
       localStorage.setItem(LOCAL_VERSION_KEY, String(remoteVersion));
-      if (remoteVersion >= localPushRev && localPushRev > 0) {
-        localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
-      }
     } else if (
       payload.botExport?.status === "applied"
       && remoteVersion > 0
@@ -424,7 +428,7 @@
     ) {
       localStorage.setItem(LOCAL_VERSION_KEY, String(remoteVersion));
     }
-    return true;
+    return { ok: true, applied: stateApplied };
   }
 
   async function uploadEncryptedFile(payload, caption) {
@@ -545,11 +549,12 @@
     localStorage.setItem(LOCAL_VERSION_KEY, String(revision));
 
     if (!botExport) {
-      localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
       try {
         await publishPinnedState(stateToPush);
+        localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
       } catch (pinError) {
         console.warn("publishPinnedState", pinError);
+        localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(revision));
         updateSyncStatus("online", "Отправлено — ждём слияния…");
         schedulePostPushPull();
       }
@@ -573,8 +578,10 @@
     pollTimer = setInterval(async () => {
       if (!isNetworkAvailable() || !isSyncReady()) return;
       try {
-        const pulled = await pullFromTelegram();
-        safeSyncedStatus(pulled ? "Синхронизировано" : "Telegram");
+        const result = await pullFromTelegram();
+        if (result?.applied || (result?.ok && !hasLocalUnsyncedEdits())) {
+          safeSyncedStatus("Синхронизировано");
+        }
       } catch (error) {
         console.warn("tg pull", error);
         updateSyncStatus("offline", "Telegram недоступен");
@@ -651,10 +658,12 @@
           if (pendingRev > 0) {
             startPendingBotPoll();
           }
-          if (isNetworkAvailable()) {
-            safeSyncedStatus("Синхронизировано");
-          } else {
+          if (!isNetworkAvailable()) {
             updateSyncStatus("offline", "Офлайн");
+          } else if (hasLocalUnsyncedEdits()) {
+            updateSyncStatus("online", "Ожидание отправки…");
+          } else {
+            safeSyncedStatus("Синхронизировано");
           }
         });
     };
@@ -673,7 +682,6 @@
       if (onOnlineCallback) onOnlineCallback();
     });
     window.addEventListener("offline", () => {
-      if (window.location.protocol === "file:") return;
       updateSyncStatus("offline", "Офлайн");
     });
 
@@ -710,6 +718,7 @@
     if (!isSyncReady()) return;
     if (!isNetworkAvailable()) {
       updateSyncStatus("offline", "Офлайн");
+      localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(Date.now()));
       return;
     }
     const pushOptions = pendingPushOptions;
@@ -721,6 +730,7 @@
       console.warn("tg push", error);
       const msg = error?.message || "ошибка";
       updateSyncStatus("offline", `Telegram: ${msg}`);
+      localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(Date.now()));
       notifyPushComplete(false);
     });
   }
@@ -740,6 +750,7 @@
       console.warn("tg push immediate", error);
       const msg = error?.message || "ошибка";
       updateSyncStatus("offline", `Telegram: ${msg}`);
+      localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(Date.now()));
       notifyPushComplete(false);
       throw error;
     });
