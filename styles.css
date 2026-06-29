@@ -512,6 +512,50 @@ dialog {
   gap: 2px;
 }
 
+.person-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto var(--person-bot-col, 4.75rem);
+  grid-template-rows: auto auto;
+  gap: 4px 6px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.person-card-grid > .person-line-head {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.person-card-grid > .person-top-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.person-card-grid > .person-line-money {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.person-card-grid > .bot-toggle {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: center;
+}
+
+.person-card-detailed .person-card-grid {
+  grid-template-columns: minmax(0, 1fr) var(--person-bot-col, 4.75rem);
+}
+
+.person-card-detailed .person-card-grid > .person-line-money {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.person-card-detailed .person-card-grid > .bot-toggle {
+  grid-column: 2;
+  grid-row: 2;
+}
+
 .person-head-row {
   display: flex;
   align-items: flex-start;
@@ -577,8 +621,6 @@ dialog {
   line-height: 1.1;
   text-align: center;
   cursor: pointer;
-  justify-self: end;
-  align-self: center;
 }
 
 .bot-toggle.active {
@@ -696,34 +738,43 @@ dialog {
   width: 100%;
 }
 
-.person-money-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--person-bot-col, 4.75rem);
-  gap: 6px;
-  align-items: center;
-  width: 100%;
-}
-
-.person-money-col {
-  min-width: 0;
+.person-line-money {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: rgba(169, 180, 199, 0.9);
+  font-size: 0.72rem;
+  line-height: 1.15;
+  overflow: hidden;
 }
 
-.person-line-stats {
-  color: rgba(169, 180, 199, 0.9);
-  font-size: 0.7rem;
-  line-height: 1.2;
-  width: 100%;
+.person-line-money .person-balance {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+}
+
+.person-line-money .person-stats-sep {
+  flex-shrink: 0;
 }
 
 .person-top-actions {
   display: flex;
+  flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
   width: auto;
-  max-width: 42%;
+  min-width: 4.1rem;
+  align-self: stretch;
+}
+
+.person-card-grid .person-top-actions .mini {
+  flex: 1 1 auto;
+  min-height: 30px;
+  height: auto;
+  padding: 4px 6px;
+  font-size: 0.66rem;
+  line-height: 1.1;
 }
 
 .person-line {
@@ -768,9 +819,13 @@ dialog {
 }
 
 .person-stats-line {
-  display: block;
-  width: 100%;
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  line-height: 1.15;
 }
 
 .edit-link {
