@@ -28,7 +28,23 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "125";
+const APP_BUILD = "151";
+
+const PERSON_BANK_THEMES = [
+  { id: "", label: "Без банка", short: "—" },
+  { id: "ozon", label: "Озон", short: "Oz" },
+  { id: "yoomoney", label: "ЮMoney", short: "Ю" },
+  { id: "cupis", label: "ЦУПИС", short: "ЦУ" },
+  { id: "yandex", label: "Яндекс", short: "Я" },
+  { id: "wildberries", label: "Wildberries", short: "WB" },
+  { id: "sber", label: "Сбер", short: "✓" },
+  { id: "otp", label: "ОТП", short: "ОТП" },
+  { id: "raif", label: "Райффайзен", short: "R" },
+  { id: "tinkoff", label: "Тинькофф", short: "T" },
+  { id: "alfa", label: "Альфа", short: "A" },
+  { id: "psb", label: "ПСБ", short: "ПС" },
+];
+const PERSON_BANK_THEME_IDS = new Set(PERSON_BANK_THEMES.map((item) => item.id));
 const PERSON_DRAG_LONG_PRESS_MS = 450;
 
 let coldAppLaunch = false;
@@ -217,6 +233,7 @@ try {
   state = getDefaultState();
 }
 let editingPersonId = null;
+let phoneAutoPrefixSuppressed = false;
 let currentOperation = null;
 let personDragSession = null;
 let amountEntryText = "";
@@ -279,6 +296,7 @@ const elements = {
   personCardNumberInput: document.querySelector("#personCardNumberInput"),
   personCardDetailsInput: document.querySelector("#personCardDetailsInput"),
   personProfileNoteInput: document.querySelector("#personProfileNoteInput"),
+  personCardTintPicker: document.querySelector("#personCardTintPicker"),
   personUseInBotCheckbox: document.querySelector("#personUseInBotCheckbox"),
   personFolderPicker: document.querySelector("#personFolderPicker"),
   deletePersonButton: document.querySelector("#deletePersonButton"),
@@ -396,41 +414,9 @@ function initFamilySync() {
   FamilySync.shouldRejectStaleRemote = shouldRejectStaleRemoteState;
 
   FamilySync.onLocalStateMerged = (mergedState) => {
-    const localBefore = applyDeletedPersonFilter(normalizeLoadedState(state));
-    const normalizedRemote = applyDeletedPersonFilter(
-      normalizeLoadedState(filterRemotePeople(mergedState)),
-    );
-    if (shouldReplaceWithRemoteWipe(localBefore, normalizedRemote)) {
-      applyRemoteStateAsReplace(normalizedRemote, 0);
-      return;
-    }
-    if (shouldRejectStaleRemoteState(localBefore, normalizedRemote)) {
-      applySyncMetaFromRemote(normalizedRemote);
-      if (!remoteMeetsDataEpoch(normalizedRemote)) {
-        scheduleOverwriteStaleCloud();
-      }
-      render();
-      return;
-    }
-    applySyncMetaFromRemote(normalizedRemote);
-    state = applyDeletedPersonFilter(normalizeLoadedState(normalizedRemote));
-    state = mergePeoplePreservingLocalEdits(localBefore, normalizedRemote, state);
-    state = dropRemoteOnlyGhosts(localBefore, normalizedRemote, state);
-    state = preserveLocalBotFields(localBefore, state);
-    state = applyDeletedPersonFilter(state);
-    state = preferLocalFiltersWhenShrunk(localBefore, normalizedRemote, state);
-    state = scrubFiltersToPeople(state);
-    state = applyDeletedFolderFilter(state);
-    reconcileDeletedPersonIds(normalizedRemote);
-    reconcileDeletedFolderIds(normalizedRemote);
-    state = ensureStateDataEpoch(state);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
-    render();
-    tryConfirmCloudSync(state);
-    if (hasBotPendingSync() && FamilySync.pullNow) {
-      FamilySync.pullNow().catch(() => {});
-    }
+    if (!mergedState) return;
+    const remoteVersion = Number(localStorage.getItem("family-counter-local-version") || 0);
+    applyRemoteState(mergedState, remoteVersion);
   };
 
   FamilySync.onBotExportRemote = handleRemoteBotExport;
@@ -689,6 +675,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = preferLocalFiltersWhenShrunk(localBefore, normalizedRemote, state);
   state = scrubFiltersToPeople(state);
   state = applyDeletedFolderFilter(state);
+  state = finalizePeopleAfterMerge(localBefore, normalizedRemote, state);
   state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
@@ -843,6 +830,50 @@ function filterRemotePeople(remoteState) {
   };
 }
 
+function dedupePeopleById(people) {
+  if (window.FamilyMerge?.dedupePeopleById) {
+    return window.FamilyMerge.dedupePeopleById(people);
+  }
+  const map = new Map();
+  (people || []).forEach((person) => {
+    if (person?.id && !map.has(person.id)) map.set(person.id, person);
+  });
+  return [...map.values()];
+}
+
+function orderPeopleLike(templatePeople, mergedPeople) {
+  if (window.FamilyMerge?.orderPeopleLike) {
+    return window.FamilyMerge.orderPeopleLike(templatePeople, mergedPeople);
+  }
+  const byId = new Map((mergedPeople || []).filter((p) => p?.id).map((p) => [p.id, p]));
+  const ordered = [];
+  const seen = new Set();
+  (templatePeople || []).forEach((person) => {
+    if (!person?.id || seen.has(person.id)) return;
+    const merged = byId.get(person.id);
+    if (merged) {
+      ordered.push(merged);
+      seen.add(person.id);
+    }
+  });
+  (mergedPeople || []).forEach((person) => {
+    if (person?.id && !seen.has(person.id)) {
+      ordered.push(person);
+      seen.add(person.id);
+    }
+  });
+  return ordered;
+}
+
+function finalizePeopleAfterMerge(localState, remoteState, mergedState) {
+  let people = dedupePeopleById(mergedState.people || []);
+  const localUi = Number(localState?.uiUpdatedAt || 0);
+  const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
+  const template = localUi >= remoteUi ? localState?.people : remoteState?.people;
+  people = orderPeopleLike(template, people);
+  return { ...mergedState, people };
+}
+
 function dropRemoteOnlyGhosts(localState, remoteState, mergedState) {
   const deletedPeople = getDeletedPersonIdsFrom(localState);
   const deletedFolders = getDeletedFolderIdsFrom(localState);
@@ -908,7 +939,7 @@ function mergePeoplePreservingLocalEdits(localState, remoteState, mergedState) {
     });
   }
 
-  return { ...mergedState, people: [...byId.values()] };
+  return { ...mergedState, people: dedupePeopleById([...byId.values()]) };
 }
 
 function preserveLocalBotFields(localState, mergedState) {
@@ -1144,6 +1175,28 @@ function bindSyncDialogOpen() {
   }
 }
 
+function bindPersonFormEnterNavigation() {
+  const fields = [
+    elements.personFirstNameInput,
+    elements.personLastNameInput,
+    elements.personBalanceInput,
+    elements.personPhoneInput,
+    elements.personCardNumberInput,
+    elements.personCardDetailsInput,
+    elements.personProfileNoteInput,
+  ].filter(Boolean);
+
+  fields.slice(0, -1).forEach((input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const index = fields.indexOf(input);
+      const next = fields[index + 1];
+      if (next) next.focus();
+    });
+  });
+}
+
 function bindEvents() {
   if (!elements.addPersonButton) {
     showBootError("Не загрузился интерфейс (index.html)");
@@ -1166,11 +1219,15 @@ function bindEvents() {
   }
   elements.cancelPersonButton.addEventListener("click", () => closeAppDialog(elements.personDialog));
   elements.personForm.addEventListener("submit", savePerson);
+  bindPersonFormEnterNavigation();
   if (elements.personCardNumberInput) {
     elements.personCardNumberInput.addEventListener("input", handleCardNumberInput);
   }
   if (elements.personCardDetailsInput) {
     elements.personCardDetailsInput.addEventListener("input", handleCardDetailsInput);
+  }
+  if (elements.personPhoneInput) {
+    elements.personPhoneInput.addEventListener("input", handlePhoneInput);
   }
   elements.addFolderButton.addEventListener("click", openFolderDialog);
   elements.deleteFolderButton.addEventListener("click", openDeleteFolderDialog);
@@ -1197,6 +1254,9 @@ function bindEvents() {
     });
   }
   elements.personFilter.addEventListener("change", renderHistory);
+  elements.historyList.addEventListener("change", handleHistoryTypeChange);
+  elements.historyList.addEventListener("blur", handleHistoryNoteBlur, true);
+  elements.historyList.addEventListener("keydown", handleHistoryNoteKeydown);
   if (elements.commentFilter) {
     elements.commentFilter.addEventListener("input", renderHistory);
   }
@@ -1488,14 +1548,16 @@ function normalizeLoadedState(parsed) {
   withTombstones = applyDeletedPersonFilter(applyDeletedFolderFilter(withTombstones));
   const folders = Array.isArray(withTombstones.folders) ? withTombstones.folders : [];
   const folderIds = new Set(folders.map((folder) => folder.id));
-  const people = Array.isArray(withTombstones.people)
-    ? withTombstones.people.map((person) => normalizePerson({
-      ...person,
-      folderIds: Array.isArray(person.folderIds)
-        ? person.folderIds.filter((id) => folderIds.has(id))
-        : [],
-    }))
-    : [];
+  const people = dedupePeopleById(
+    Array.isArray(withTombstones.people)
+      ? withTombstones.people.map((person) => normalizePerson({
+        ...person,
+        folderIds: Array.isArray(person.folderIds)
+          ? person.folderIds.filter((id) => folderIds.has(id))
+          : [],
+      }))
+      : [],
+  );
   const existingFirstNames = new Set(people.map((person) => getPersonFirstName(person)));
   const botGroupId = withTombstones.botGroupId != null && withTombstones.botGroupId !== ""
     ? Number(withTombstones.botGroupId)
@@ -1634,6 +1696,7 @@ function normalizePerson(person) {
     cardNumber: String(person.cardNumber ?? "").trim(),
     cardDetails: String(person.cardDetails ?? "").trim(),
     profileNote: String(person.profileNote ?? "").trim(),
+    cardTint: normalizeCardTint(person.cardTint),
     useInBot,
     botPendingSync: pending,
     botPendingAction: person.botPendingAction || null,
@@ -1683,6 +1746,50 @@ function touchPersonFields(person, fields, at = Date.now()) {
   return normalizePerson({ ...person, fieldUpdatedAt });
 }
 
+function normalizeCardTint(value) {
+  const tint = String(value ?? "").trim();
+  return PERSON_BANK_THEME_IDS.has(tint) ? tint : "";
+}
+
+function getBankThemeMeta(cardTint) {
+  const id = normalizeCardTint(cardTint);
+  return PERSON_BANK_THEMES.find((item) => item.id === id) || PERSON_BANK_THEMES[0];
+}
+
+function getPersonCardTintClass(cardTint) {
+  const tint = normalizeCardTint(cardTint);
+  return tint ? `person-card-bank-${tint}` : "";
+}
+
+const BANK_ICON_IMAGE_IDS = new Set([
+  "ozon", "yoomoney", "cupis", "yandex", "wildberries", "sber", "otp",
+  "raif", "tinkoff", "alfa", "psb",
+]);
+
+function buildBankIconMark(meta) {
+  const mark = document.createElement("span");
+  mark.className = "bank-app-icon-mark";
+  if (BANK_ICON_IMAGE_IDS.has(meta.id)) {
+    mark.hidden = true;
+    return mark;
+  }
+  mark.textContent = meta.short;
+  return mark;
+}
+
+function appendPersonBankBadge(card, cardTint) {
+  const meta = getBankThemeMeta(cardTint);
+  if (!meta?.id) return;
+  const nameEl = card.querySelector(".person-name");
+  if (!nameEl) return;
+  const badge = document.createElement("span");
+  badge.className = `person-bank-badge bank-app-icon bank-app-icon--${meta.id}`;
+  badge.title = meta.label;
+  badge.setAttribute("aria-label", meta.label);
+  badge.append(buildBankIconMark(meta));
+  nameEl.prepend(badge);
+}
+
 function touchPersonProfileFields(person, at = Date.now()) {
   return touchPersonFields(person, [
     "firstName",
@@ -1692,6 +1799,7 @@ function touchPersonProfileFields(person, at = Date.now()) {
     "cardNumber",
     "cardDetails",
     "profileNote",
+    "cardTint",
     "folderIds",
     "balance",
   ], at);
@@ -1981,7 +2089,10 @@ function renderDetailsPeople() {
 
 function buildPersonCard(person, stats, detailed) {
   const card = document.createElement("article");
-  card.className = detailed ? "person-card person-card-detailed" : "person-card";
+  const tintClass = getPersonCardTintClass(person.cardTint);
+  card.className = detailed
+    ? `person-card person-card-detailed${tintClass ? ` ${tintClass}` : ""}`
+    : `person-card${tintClass ? ` ${tintClass}` : ""}`;
   card.dataset.personId = person.id;
   card.draggable = false;
   const topActionsHtml = detailed
@@ -2072,6 +2183,7 @@ function buildPersonCard(person, stats, detailed) {
   if (detailed) {
     fillPersonDetailsBlock(card, person);
   }
+  appendPersonBankBadge(card, person.cardTint);
   return card;
 }
 
@@ -2116,10 +2228,62 @@ function resetPersonDragSession(container) {
   if (!personDragSession) return;
   if (personDragSession.timer) clearTimeout(personDragSession.timer);
   if (personDragSession.card) {
-    personDragSession.card.classList.remove("is-dragging");
+    personDragSession.card.classList.remove("is-dragging", "is-drag-armed");
   }
-  if (container) container.classList.remove("is-reorder-active");
+  const list = container || elements.peopleList;
+  if (list) list.classList.remove("is-reorder-active", "is-reorder-armed");
+  document.body.classList.remove("person-reorder-lock");
+  stopPersonDragDocumentListeners();
   personDragSession = null;
+}
+
+function handlePersonDragPointerMove(event) {
+  if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
+  const container = elements.peopleList;
+  if (!container) return;
+  if (personDragSession.timer || personDragSession.dragging) {
+    event.preventDefault();
+  }
+  if (!personDragSession.dragging) return;
+  updatePersonDragPosition(container, personDragSession.card, event.clientY);
+}
+
+function handlePersonDragPointerEnd(event) {
+  if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
+  const container = elements.peopleList;
+  const wasDragging = personDragSession.dragging;
+  if (wasDragging && container) {
+    commitPeopleOrderFromDom(container);
+    event.preventDefault();
+  }
+  resetPersonDragSession(container);
+}
+
+function handlePersonDragTouchMove(event) {
+  if (!personDragSession) return;
+  if (personDragSession.timer || personDragSession.dragging) {
+    event.preventDefault();
+  }
+}
+
+let personDragDocListenersBound = false;
+
+function startPersonDragDocumentListeners() {
+  if (personDragDocListenersBound) return;
+  personDragDocListenersBound = true;
+  document.addEventListener("pointermove", handlePersonDragPointerMove, { passive: false });
+  document.addEventListener("pointerup", handlePersonDragPointerEnd);
+  document.addEventListener("pointercancel", handlePersonDragPointerEnd);
+  document.addEventListener("touchmove", handlePersonDragTouchMove, { passive: false });
+}
+
+function stopPersonDragDocumentListeners() {
+  if (!personDragDocListenersBound) return;
+  personDragDocListenersBound = false;
+  document.removeEventListener("pointermove", handlePersonDragPointerMove);
+  document.removeEventListener("pointerup", handlePersonDragPointerEnd);
+  document.removeEventListener("pointercancel", handlePersonDragPointerEnd);
+  document.removeEventListener("touchmove", handlePersonDragTouchMove);
 }
 
 function bindPeopleDragReorder() {
@@ -2145,7 +2309,7 @@ function bindPeopleDragReorder() {
   }
 
   container.addEventListener("selectstart", (event) => {
-    if (personDragSession?.dragging) event.preventDefault();
+    if (personDragSession) event.preventDefault();
   });
 
   container.addEventListener("dragstart", (event) => {
@@ -2160,6 +2324,10 @@ function bindPeopleDragReorder() {
 
     event.preventDefault();
     resetPersonDragSession(container);
+    startPersonDragDocumentListeners();
+    card.classList.add("is-drag-armed");
+    container.classList.add("is-reorder-armed");
+    document.body.classList.add("person-reorder-lock");
     const longPressMs = event.pointerType === "mouse" ? 280 : PERSON_DRAG_LONG_PRESS_MS;
     personDragSession = {
       personId: card.dataset.personId,
@@ -2170,29 +2338,6 @@ function bindPeopleDragReorder() {
       dragging: false,
       timer: setTimeout(onLongPressReady, longPressMs),
     };
-  });
-
-  container.addEventListener("pointermove", (event) => {
-    if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
-    if (!personDragSession.dragging) return;
-    event.preventDefault();
-    updatePersonDragPosition(container, personDragSession.card, event.clientY);
-  });
-
-  container.addEventListener("pointerup", (event) => {
-    if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
-    const wasDragging = personDragSession.dragging;
-    if (wasDragging) {
-      commitPeopleOrderFromDom(container);
-      event.preventDefault();
-    }
-    resetPersonDragSession(container);
-  });
-
-  container.addEventListener("pointercancel", (event) => {
-    if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
-    if (personDragSession.dragging) renderPeople();
-    resetPersonDragSession(container);
   });
 }
 
@@ -2248,9 +2393,9 @@ function commitPeopleOrderFromDom(container) {
   const nextOrder = state.people.map((person) => person.id).join("|");
   if (previousOrder === nextOrder) return;
 
+  state.uiUpdatedAt = Date.now();
   markLocalEditPending();
   saveState();
-  renderPeople();
 }
 
 function setPersonDetailLine(element, value) {
@@ -2628,6 +2773,103 @@ function matchesCommentFilter(note, query) {
   return (note || "").toLowerCase().includes(normalizedQuery);
 }
 
+function getHistoryEntryDelta(entry) {
+  const amount = Number(entry.amount || 0);
+  if (entry.direction === "plus") return amount;
+  if (entry.direction === "minus") return -amount;
+  if (entry.type === "income") return amount;
+  return -amount;
+}
+
+function historyTypeToDirection(type) {
+  return type === "income" ? "plus" : "minus";
+}
+
+function findHistoryEntryRef(entryId) {
+  const inCurrent = (state.history || []).find((entry) => entry.id === entryId);
+  if (inCurrent) return inCurrent;
+  for (const month of getHistoryMonths()) {
+    const found = (month.history || []).find((entry) => entry.id === entryId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function getAllHistoryEntriesChronological() {
+  const entries = [];
+  getHistoryMonths().forEach((month) => {
+    (month.history || []).forEach((entry) => entries.push(entry));
+  });
+  (state.history || []).forEach((entry) => entries.push(entry));
+  return entries.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+}
+
+function replayBalanceAfterForPerson(personId) {
+  const personEntries = getAllHistoryEntriesChronological()
+    .filter((entry) => entry.personId === personId);
+  if (personEntries.length === 0) return;
+
+  const first = personEntries[0];
+  let balance = Number(first.balanceAfter || 0) - getHistoryEntryDelta(first);
+  personEntries.forEach((entry) => {
+    balance = Math.round((balance + getHistoryEntryDelta(entry)) * 100) / 100;
+    entry.balanceAfter = balance;
+  });
+
+  const person = state.people.find((item) => item.id === personId);
+  if (person) {
+    person.balance = balance;
+  }
+}
+
+function changeHistoryEntryType(entryId, newType) {
+  if (!["income", "purchase", "transfer"].includes(newType)) return;
+  const entry = findHistoryEntryRef(entryId);
+  if (!entry || entry.type === newType) return;
+
+  entry.type = newType;
+  entry.direction = historyTypeToDirection(newType);
+  replayBalanceAfterForPerson(entry.personId);
+  markLocalEditPending();
+  saveState({ immediatePush: true });
+  render();
+}
+
+function changeHistoryEntryNote(entryId, note) {
+  const entry = findHistoryEntryRef(entryId);
+  if (!entry) return;
+  const normalized = String(note ?? "").trim();
+  if ((entry.note || "") === normalized) return;
+
+  entry.note = normalized;
+  markLocalEditPending();
+  saveState({ immediatePush: true });
+
+  const commentQuery = elements.commentFilter?.value || "";
+  if (commentQuery.trim() && !matchesCommentFilter(normalized, commentQuery)) {
+    renderHistory();
+  }
+}
+
+function handleHistoryTypeChange(event) {
+  const select = event.target.closest(".history-type-select");
+  if (!select) return;
+  changeHistoryEntryType(select.dataset.historyId, select.value);
+}
+
+function handleHistoryNoteBlur(event) {
+  const input = event.target.closest(".history-note-input");
+  if (!input) return;
+  changeHistoryEntryNote(input.dataset.historyId, input.value);
+}
+
+function handleHistoryNoteKeydown(event) {
+  const input = event.target.closest(".history-note-input");
+  if (!input || event.key !== "Enter") return;
+  event.preventDefault();
+  input.blur();
+}
+
 function renderHistory() {
   const sourceHistory = getActiveHistoryEntries();
   const personId = elements.personFilter.value;
@@ -2660,18 +2902,35 @@ function renderHistory() {
   rows.forEach((item) => {
     const row = document.createElement("article");
     row.className = "history-item";
+    row.dataset.historyId = item.id;
     const sign = item.direction === "plus" ? "+" : "-";
-    const note = item.note ? ` · ${item.note}` : "";
     row.innerHTML = `
       <div class="history-line">
         <strong></strong>
         <span class="history-amount ${item.type}"></span>
       </div>
-      <div class="history-meta"></div>
+      <div class="history-meta">
+        <select class="history-type-select" data-history-id="${item.id}" aria-label="Тип операции">
+          <option value="income">Пополнение</option>
+          <option value="purchase">Покупка</option>
+          <option value="transfer">Перевод</option>
+        </select>
+        <span class="history-meta-date"></span>
+      </div>
+      <input
+        class="history-note-input"
+        type="text"
+        data-history-id="${item.id}"
+        maxlength="80"
+        placeholder="Комментарий"
+        aria-label="Комментарий к операции"
+      >
     `;
     row.querySelector("strong").textContent = item.personName;
     row.querySelector(".history-amount").textContent = `${sign}${formatMoney(item.amount)}`;
-    row.querySelector(".history-meta").textContent = `${TYPE_LABELS[item.type]} · ${formatDate(item.createdAt)}${note}`;
+    row.querySelector(".history-type-select").value = item.type;
+    row.querySelector(".history-meta-date").textContent = formatDate(item.createdAt);
+    row.querySelector(".history-note-input").value = item.note || "";
     fragment.append(row);
   });
   elements.historyList.append(fragment);
@@ -2727,6 +2986,7 @@ function buildAllPeopleCopyText(mode) {
 
 function openPersonDialog(person = null) {
   editingPersonId = person?.id ?? null;
+  phoneAutoPrefixSuppressed = false;
   elements.personDialogTitle.textContent = person ? "Изменить карту" : "Добавить карту";
   elements.personFirstNameInput.value = person?.firstName ?? "";
   elements.personLastNameInput.value = person?.lastName ?? "";
@@ -2739,8 +2999,42 @@ function openPersonDialog(person = null) {
     elements.personUseInBotCheckbox.checked = Boolean(person?.useInBot);
   }
   elements.deletePersonButton.hidden = !person;
+  renderCardTintPicker(person?.cardTint ?? "");
   renderFolderPicker(person?.folderIds ?? []);
   openAppDialog(elements.personDialog);
+}
+
+function renderCardTintPicker(selectedTint = "") {
+  const picker = elements.personCardTintPicker;
+  if (!picker) return;
+  const normalized = normalizeCardTint(selectedTint);
+  picker.innerHTML = "";
+  picker.dataset.selectedTint = normalized;
+
+  PERSON_BANK_THEMES.forEach(({ id, label, short }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `bank-app-icon bank-app-icon--${id || "none"}`;
+    button.dataset.tintId = id;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", id === normalized ? "true" : "false");
+    if (id === normalized) button.classList.add("active");
+    button.append(buildBankIconMark({ id, label, short }));
+    button.addEventListener("click", () => {
+      picker.dataset.selectedTint = id;
+      picker.querySelectorAll(".bank-app-icon").forEach((item) => {
+        const isActive = item.dataset.tintId === id;
+        item.classList.toggle("active", isActive);
+        item.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    });
+    picker.append(button);
+  });
+}
+
+function getSelectedCardTint() {
+  return normalizeCardTint(elements.personCardTintPicker?.dataset.selectedTint);
 }
 
 function renderFolderPicker(selectedFolderIds = []) {
@@ -2780,6 +3074,7 @@ function savePerson(event) {
   const cardNumber = elements.personCardNumberInput.value.trim();
   const cardDetails = elements.personCardDetailsInput.value.trim();
   const profileNote = elements.personProfileNoteInput.value.trim();
+  const cardTint = getSelectedCardTint();
   const folderIds = [...elements.personFolderPicker.querySelectorAll("input:checked")]
     .map((input) => input.value);
   const name = formatPersonName(firstName, lastName);
@@ -2805,6 +3100,7 @@ function savePerson(event) {
           cardNumber,
           cardDetails,
           profileNote,
+          cardTint,
           folderIds,
         }), now)
         : person
@@ -2820,6 +3116,7 @@ function savePerson(event) {
       cardNumber,
       cardDetails,
       profileNote,
+      cardTint,
       folderIds,
       createdAt: now,
     }), now);
@@ -3165,6 +3462,15 @@ function countNonSpaceCharsBefore(text, cursor) {
   return count;
 }
 
+function countDigitsBefore(text, cursor) {
+  let count = 0;
+  const limit = Math.min(cursor, text.length);
+  for (let i = 0; i < limit; i += 1) {
+    if (text[i] >= "0" && text[i] <= "9") count += 1;
+  }
+  return count;
+}
+
 function restoreInputCursor(input, newValue, charsBeforeCursor) {
   let pos = 0;
   let seen = 0;
@@ -3174,6 +3480,24 @@ function restoreInputCursor(input, newValue, charsBeforeCursor) {
     if (seen >= charsBeforeCursor) break;
   }
   if (seen < charsBeforeCursor) pos = newValue.length;
+  input.setSelectionRange(pos, pos);
+}
+
+function restoreInputCursorAfterDigits(input, newValue, digitsBeforeCursor) {
+  if (digitsBeforeCursor <= 0) {
+    input.setSelectionRange(0, 0);
+    return;
+  }
+  let pos = 0;
+  let seen = 0;
+  for (let i = 0; i < newValue.length; i += 1) {
+    if (newValue[i] >= "0" && newValue[i] <= "9") {
+      seen += 1;
+      pos = i + 1;
+      if (seen >= digitsBeforeCursor) break;
+    }
+  }
+  if (seen < digitsBeforeCursor) pos = newValue.length;
   input.setSelectionRange(pos, pos);
 }
 
@@ -3208,19 +3532,36 @@ function formatCardDetailsForInput(value) {
   return formatCardDetailsFromDigits(digitsOnly);
 }
 
+function handlePhoneInput() {
+  const input = elements.personPhoneInput;
+  if (!input) return;
+  const raw = input.value;
+
+  if (!raw) {
+    phoneAutoPrefixSuppressed = true;
+    return;
+  }
+
+  if (raw === "9" && !phoneAutoPrefixSuppressed) {
+    input.value = "+7 9";
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  }
+}
+
 function handleCardDetailsInput() {
   const input = elements.personCardDetailsInput;
   if (!input) return;
   const raw = input.value;
   const cursor = input.selectionStart ?? raw.length;
-  const charsBeforeCursor = countNonSpaceCharsBefore(raw, cursor);
+  const digitsBeforeCursor = countDigitsBefore(raw, cursor);
   const compact = raw.replace(/\s/g, "");
   const newValue = /[^\d/]/.test(compact)
     ? compact
     : formatCardDetailsFromDigits(compact.replace(/\//g, ""));
   if (newValue === raw) return;
   input.value = newValue;
-  restoreInputCursor(input, newValue, charsBeforeCursor);
+  restoreInputCursorAfterDigits(input, newValue, digitsBeforeCursor);
 }
 
 function formatCardDigitGroups(digits) {
