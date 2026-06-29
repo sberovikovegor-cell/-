@@ -511,6 +511,10 @@
       }
     }
 
+    if (stateToPush && typeof window.sanitizeStateForCloud === "function") {
+      stateToPush = window.sanitizeStateForCloud(stateToPush);
+    }
+
     const payload = {
       type: "push",
       familyCode: code,
