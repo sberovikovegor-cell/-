@@ -28,7 +28,8 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "164";
+const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
+const APP_BUILD = "166";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -45,7 +46,7 @@ const PERSON_BANK_THEMES = [
   { id: "psb", label: "ПСБ", short: "ПС" },
 ];
 const PERSON_BANK_THEME_IDS = new Set(PERSON_BANK_THEMES.map((item) => item.id));
-const PERSON_DRAG_LONG_PRESS_MS = 1200;
+const PERSON_DRAG_LONG_PRESS_MS = 1000;
 const PERSON_DRAG_MOVE_CANCEL_PX = 12;
 
 let coldAppLaunch = false;
@@ -432,6 +433,10 @@ function initFamilySync() {
       const fp = stateCloudFingerprint(pushedState);
       if (fp) localStorage.setItem(CLOUD_CONFIRM_FP_KEY, fp);
     }
+    const pushedRev = Number(localStorage.getItem("family-counter-local-version") || 0);
+    if (pushedRev > 0) {
+      localStorage.setItem(APPLIED_REMOTE_PULL_KEY, String(pushedRev));
+    }
     if (localStorage.getItem(CLOUD_CONFIRM_FP_KEY) && FamilySync.updateSyncStatus) {
       FamilySync.updateSyncStatus("online", "Проверка канала…");
     }
@@ -529,7 +534,9 @@ function stateCloudFingerprint(appState) {
   const normalized = applyDeletedPersonFilter(normalizeLoadedState(appState));
   const deleted = getDeletedPersonIdsFrom(normalized);
   const people = (normalized.people || [])
-    .filter((person) => person && !deleted.has(person.id))
+    .filter((person) => person && !deleted.has(person.id));
+  const peopleOrder = people.map((person) => person.id).join("|");
+  const peopleSig = people
     .map((person) => `${person.id}|${Number(person.balance || 0)}|${getPersonFirstName(person)}|${person.phone || ""}|${getCardNumberForBot(person)}`)
     .sort()
     .join(",");
@@ -538,9 +545,10 @@ function stateCloudFingerprint(appState) {
   const histMonths = (normalized.historyMonths || []).length;
   const folders = (normalized.folders || []).length;
   const ui = Number(normalized.uiUpdatedAt || 0);
+  const orderAt = Number(normalized.peopleOrderUpdatedAt || 0);
   const wipe = Number(normalized.wipedAtMs || 0);
   const epoch = Number(normalized.dataEpoch || 0);
-  return `e${epoch}|w${wipe}|u${ui}|p${people}|h${histLen}|hc${histClear}|hm${histMonths}|f${folders}`;
+  return `e${epoch}|w${wipe}|u${ui}|po${orderAt}|ord${peopleOrder}|p${peopleSig}|h${histLen}|hc${histClear}|hm${histMonths}|f${folders}`;
 }
 
 function tryConfirmCloudSync(remoteState) {
@@ -679,6 +687,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = applyDeletedFolderFilter(state);
   state = finalizePeopleAfterMerge(localBefore, normalizedRemote, state);
   state = preserveLocalBalanceOverrides(localBefore, state);
+  state = preserveLocalPeopleOrder(localBefore, state);
   syncBalancesFromHistory();
   state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
@@ -869,11 +878,23 @@ function orderPeopleLike(templatePeople, mergedPeople) {
   return ordered;
 }
 
+function preserveLocalPeopleOrder(localState, mergedState) {
+  const pending = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
+  const localOrderAt = Number(localState?.peopleOrderUpdatedAt || 0);
+  const mergedOrderAt = Number(mergedState?.peopleOrderUpdatedAt || 0);
+  if (!pending || localOrderAt <= mergedOrderAt) return mergedState;
+  return {
+    ...mergedState,
+    people: orderPeopleLike(localState?.people || [], mergedState.people || []),
+    peopleOrderUpdatedAt: localOrderAt,
+  };
+}
+
 function finalizePeopleAfterMerge(localState, remoteState, mergedState) {
   let people = dedupePeopleById(mergedState.people || []);
-  const localUi = Number(localState?.uiUpdatedAt || 0);
-  const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
-  const template = localUi >= remoteUi ? localState?.people : remoteState?.people;
+  const localOrderAt = Number(localState?.peopleOrderUpdatedAt || 0);
+  const remoteOrderAt = Number(remoteState?.peopleOrderUpdatedAt || 0);
+  const template = localOrderAt >= remoteOrderAt ? localState?.people : remoteState?.people;
   people = orderPeopleLike(template, people);
   return { ...mergedState, people };
 }
@@ -1330,6 +1351,7 @@ function getDefaultState() {
     singleFilterMode: false,
     botGroupId: null,
     uiUpdatedAt: 0,
+    peopleOrderUpdatedAt: 0,
     wipedAtMs: 0,
     dataEpoch: requiredEpoch > 0 ? requiredEpoch : 0,
     deletedPersonIds: [],
@@ -1592,6 +1614,7 @@ function normalizeLoadedState(parsed) {
     singleFilterMode: Boolean(withTombstones.singleFilterMode),
     botGroupId: Number.isFinite(botGroupId) ? botGroupId : null,
     uiUpdatedAt: Number(withTombstones.uiUpdatedAt || 0),
+    peopleOrderUpdatedAt: Number(withTombstones.peopleOrderUpdatedAt || 0),
     wipedAtMs: Number(withTombstones.wipedAtMs || 0),
     dataEpoch: Number(withTombstones.dataEpoch || 0),
     syncAlert: withTombstones.syncAlert || null,
@@ -1625,6 +1648,23 @@ function sanitizePersonForCloud(person) {
   });
 }
 
+function enforceLocalPeopleOrderOnPush(localState, mergedState) {
+  if (!localState || !mergedState) return mergedState;
+  const localOrderAt = Number(localState.peopleOrderUpdatedAt || 0);
+  if (!localOrderAt) return mergedState;
+  const mergedOrderAt = Number(mergedState.peopleOrderUpdatedAt || 0);
+  if (localOrderAt < mergedOrderAt) return mergedState;
+  const orderedPeople = orderPeopleLike(localState.people || [], mergedState.people || []);
+  const localIds = (localState.people || []).map((person) => person.id).join("|");
+  const orderedIds = orderedPeople.map((person) => person.id).join("|");
+  if (localIds === orderedIds && localOrderAt === mergedOrderAt) return mergedState;
+  return {
+    ...mergedState,
+    people: orderedPeople,
+    peopleOrderUpdatedAt: Math.max(localOrderAt, mergedOrderAt),
+  };
+}
+
 function sanitizeStateForCloud(appState) {
   if (!appState) return appState;
   return {
@@ -1634,6 +1674,7 @@ function sanitizeStateForCloud(appState) {
 }
 
 window.sanitizeStateForCloud = sanitizeStateForCloud;
+window.enforceLocalPeopleOrderOnPush = enforceLocalPeopleOrderOnPush;
 
 function reconcileBotPendingFromRemote(normalizedRemote) {
   if (!hasBotPendingSync() || !normalizedRemote) return;
@@ -2182,6 +2223,46 @@ function renderDetailsPeople() {
   renderPeopleList(elements.detailsPeopleList, true);
 }
 
+function fillPersonCard(card, person, stats, detailed) {
+  const tintClass = getPersonCardTintClass(person.cardTint);
+  const baseClass = detailed ? "person-card person-card-detailed" : "person-card";
+  card.className = tintClass ? `${baseClass} ${tintClass}` : baseClass;
+  card.dataset.personId = person.id;
+
+  const firstName = getPersonFirstName(person);
+  const lastName = getPersonLastName(person);
+  const firstNameBtn = card.querySelector(".person-first-name");
+  const lastNameBtn = card.querySelector(".person-last-name");
+  if (firstNameBtn) {
+    if (firstName) {
+      firstNameBtn.textContent = firstName;
+      firstNameBtn.hidden = false;
+    } else {
+      firstNameBtn.textContent = "";
+      firstNameBtn.hidden = true;
+    }
+  }
+  if (lastNameBtn) {
+    if (lastName) {
+      lastNameBtn.textContent = lastName;
+      lastNameBtn.hidden = false;
+    } else {
+      lastNameBtn.textContent = "";
+      lastNameBtn.hidden = true;
+    }
+  }
+  renderBotToggleButton(card.querySelector(".bot-toggle"), person);
+  const balanceEl = card.querySelector(".person-balance");
+  if (balanceEl) balanceEl.textContent = formatMoney(person.balance);
+  const incomeEl = card.querySelector(".last-income");
+  if (incomeEl) incomeEl.textContent = formatMoney(stats.lastIncomeAmount);
+  const statsEl = card.querySelector(".person-stats-line");
+  if (statsEl) statsEl.textContent = formatPersonPurchaseStats(stats);
+  if (detailed) {
+    fillPersonDetailsBlock(card, person);
+  }
+}
+
 function buildPersonCard(person, stats, detailed) {
   const card = document.createElement("article");
   const tintClass = getPersonCardTintClass(person.cardTint);
@@ -2252,37 +2333,11 @@ function buildPersonCard(person, stats, detailed) {
     <div class="person-line person-line-stats">
       <span class="person-stats-line"></span>
     </div>`;
-  const firstName = getPersonFirstName(person);
-  const lastName = getPersonLastName(person);
-  const firstNameBtn = card.querySelector(".person-first-name");
-  const lastNameBtn = card.querySelector(".person-last-name");
-  if (firstName) {
-    firstNameBtn.textContent = firstName;
-    firstNameBtn.hidden = false;
-  } else {
-    firstNameBtn.textContent = "";
-    firstNameBtn.hidden = true;
-  }
-  if (lastName) {
-    lastNameBtn.textContent = lastName;
-    lastNameBtn.hidden = false;
-  } else {
-    lastNameBtn.textContent = "";
-    lastNameBtn.hidden = true;
-  }
-  const botToggle = card.querySelector(".bot-toggle");
-  renderBotToggleButton(botToggle, person);
-  card.querySelector(".person-balance").textContent = formatMoney(person.balance);
-  card.querySelector(".last-income").textContent = formatMoney(stats.lastIncomeAmount);
-  card.querySelector(".person-stats-line").textContent = formatPersonPurchaseStats(stats);
-  if (detailed) {
-    fillPersonDetailsBlock(card, person);
-  }
+  fillPersonCard(card, person, stats, detailed);
   return card;
 }
 
 function renderPeopleList(container, detailed) {
-  container.innerHTML = "";
   let visiblePeople = getVisiblePeople();
 
   if (state.people.length > 0 && visiblePeople.length === 0 && !filtersAutoCleared) {
@@ -2295,15 +2350,28 @@ function renderPeopleList(container, detailed) {
   }
 
   if (state.people.length === 0) {
+    container.innerHTML = "";
     container.append(createEmptyState("Нет карт", "Добавьте себя, жену, детей или друзей."));
     return;
   }
 
   if (visiblePeople.length === 0) {
+    container.innerHTML = "";
     container.append(createEmptyState("Никого не найдено", "Выключите фильтры или измените папки и имена."));
     return;
   }
 
+  const existingCards = [...container.querySelectorAll(".person-card")];
+  const existingIds = existingCards.map((card) => card.dataset.personId).join("|");
+  const newIds = visiblePeople.map((person) => person.id).join("|");
+  if (existingIds === newIds && existingCards.length === visiblePeople.length) {
+    visiblePeople.forEach((person, index) => {
+      fillPersonCard(existingCards[index], person, getPersonStats(person.id), detailed);
+    });
+    return;
+  }
+
+  container.innerHTML = "";
   const fragment = document.createDocumentFragment();
   visiblePeople.forEach((person) => {
     const stats = getPersonStats(person.id);
@@ -2496,9 +2564,12 @@ function commitPeopleOrderFromDom(container) {
   const nextOrder = state.people.map((person) => person.id).join("|");
   if (previousOrder === nextOrder) return;
 
-  state.uiUpdatedAt = Date.now();
+  const now = Date.now();
+  state.peopleOrderUpdatedAt = now;
+  state.uiUpdatedAt = now;
   markLocalEditPending();
-  saveState();
+  saveState({ immediatePush: true });
+  render();
 }
 
 function setPersonDetailLine(element, value) {
