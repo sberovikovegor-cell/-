@@ -579,10 +579,6 @@ body.person-reorder-lock {
   z-index: 1;
 }
 
-.person-card.is-drag-pending {
-  touch-action: none;
-}
-
 .person-card.is-drag-ready {
   position: relative;
   z-index: 3;
