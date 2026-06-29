@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "89";
+const APP_BUILD = "97";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -177,6 +177,15 @@ function showBootError(message) {
   }
 }
 
+function isBenignAsyncError(reason) {
+  const name = String(reason?.name || "");
+  const msg = String(reason?.message || reason || "");
+  if (name === "AbortError") return true;
+  if (/abort|aborted/i.test(msg)) return true;
+  if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return true;
+  return false;
+}
+
 function hideBootScreen() {
   const screen = document.querySelector("#bootErrorScreen");
   if (screen) screen.classList.add("boot-error-screen--hidden");
@@ -189,10 +198,8 @@ window.addEventListener("error", (event) => {
 
 window.addEventListener("unhandledrejection", (event) => {
   console.error(event.reason);
+  if (isBenignAsyncError(event.reason)) return;
   const msg = String(event.reason?.message || event.reason || "");
-  if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) {
-    return;
-  }
   showBootError(msg || "ошибка");
 });
 
@@ -1535,6 +1542,15 @@ function getPersonFirstName(person) {
   return String(person.firstName ?? "").trim() || getFirstName(person.name);
 }
 
+function getPersonLastName(person) {
+  const last = String(person.lastName ?? "").trim();
+  if (last) return last;
+  const name = String(person.name ?? "").trim();
+  if (!name) return "";
+  const parts = name.split(/\s+/);
+  return parts.length > 1 ? parts.slice(1).join(" ") : "";
+}
+
 function getDeviceId() {
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
@@ -1799,24 +1815,44 @@ function buildPersonCard(person, stats, detailed) {
     </div>`
     : "";
   card.innerHTML = `
-    <div class="person-card-grid">
+    <div class="person-head-row">
       <div class="person-line person-line-head">
-        <span class="person-name"></span>
-        <button class="edit-link" type="button" data-action="edit">Изм.</button>
+        <div class="person-name">
+          <button type="button" class="person-name-part person-first-name" data-action="edit"></button>
+          <button type="button" class="person-name-part person-last-name" data-action="edit"></button>
+        </div>
       </div>
       ${topActionsHtml}
-      <div class="person-line person-line-money">
-        <span class="person-balance"></span>
-        <span class="row-sep">·</span>
-        <span class="last-income"></span>
-        <span class="row-sep person-stats-sep">·</span>
-        <span class="person-stats-line"></span>
-      </div>
+    </div>
+    <div class="person-line person-line-balance">
+      <span class="person-balance"></span>
+      <span class="row-sep">·</span>
+      <span class="last-income"></span>
       <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
+    </div>
+    <div class="person-line person-line-stats">
+      <span class="person-stats-line"></span>
     </div>
     ${detailsBlock}
   `;
-  card.querySelector(".person-name").textContent = person.name;
+  const firstName = getPersonFirstName(person);
+  const lastName = getPersonLastName(person);
+  const firstNameBtn = card.querySelector(".person-first-name");
+  const lastNameBtn = card.querySelector(".person-last-name");
+  if (firstName) {
+    firstNameBtn.textContent = firstName;
+    firstNameBtn.hidden = false;
+  } else {
+    firstNameBtn.textContent = "";
+    firstNameBtn.hidden = true;
+  }
+  if (lastName) {
+    lastNameBtn.textContent = lastName;
+    lastNameBtn.hidden = false;
+  } else {
+    lastNameBtn.textContent = "";
+    lastNameBtn.hidden = true;
+  }
   const botToggle = card.querySelector(".bot-toggle");
   renderBotToggleButton(botToggle, person);
   card.querySelector(".person-balance").textContent = formatMoney(person.balance);
