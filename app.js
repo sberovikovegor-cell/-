@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "161";
+const APP_BUILD = "163";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -45,7 +45,8 @@ const PERSON_BANK_THEMES = [
   { id: "psb", label: "ПСБ", short: "ПС" },
 ];
 const PERSON_BANK_THEME_IDS = new Set(PERSON_BANK_THEMES.map((item) => item.id));
-const PERSON_DRAG_LONG_PRESS_MS = 2000;
+const PERSON_DRAG_LONG_PRESS_MS = 1200;
+const PERSON_DRAG_MOVE_CANCEL_PX = 12;
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -181,6 +182,7 @@ const TYPE_LABELS = {
   income: "Пополнение",
   purchase: "Покупка",
   transfer: "Перевод",
+  balance_set: "Коррекция баланса",
 };
 
 function showBootError(message) {
@@ -676,6 +678,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = scrubFiltersToPeople(state);
   state = applyDeletedFolderFilter(state);
   state = finalizePeopleAfterMerge(localBefore, normalizedRemote, state);
+  state = preserveLocalBalanceOverrides(localBefore, state);
   syncBalancesFromHistory();
   state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
@@ -1412,6 +1415,7 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   localStorage.setItem(DELETED_PERSON_IDS_KEY, JSON.stringify(state.deletedPersonIds));
   localStorage.setItem(DELETED_FOLDER_IDS_KEY, JSON.stringify(state.deletedFolderIds));
   applySyncMetaFromRemote(state);
+  syncBalancesFromHistory();
   if (state.wipedAtMs > 0) {
     localStorage.setItem(CLOUD_WIPE_AT_KEY, String(state.wipedAtMs));
   }
@@ -1508,7 +1512,10 @@ function loadState() {
     applyDeletedPersonFilter(applyDeletedFolderFilter(loaded)),
   );
   if (window.FamilyMerge?.replayBalancesFromHistory) {
-    filtered.people = FamilyMerge.replayBalancesFromHistory(filtered.people, filtered.history);
+    const fullHistory = window.FamilyMerge.collectAllHistory
+      ? FamilyMerge.collectAllHistory(filtered)
+      : (filtered.history || []);
+    filtered.people = FamilyMerge.replayBalancesFromHistory(filtered.people, fullHistory);
   }
   const json = JSON.stringify(filtered);
   localStorage.setItem(STORAGE_KEY, json);
@@ -1914,9 +1921,72 @@ function applySyncMetaFromRemote(remoteState) {
   renderSyncAlertBanner();
 }
 
+function preserveLocalBalanceOverrides(localState, mergedState) {
+  const pending = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
+  const localHistory = localState?.history || [];
+  const mergedHistory = mergedState?.history || [];
+  const localById = new Map((localState.people || []).map((person) => [person.id, person]));
+
+  let history = mergedHistory;
+  if (pending) {
+    const localSets = localHistory.filter((entry) => entry.type === "balance_set");
+    if (localSets.length) {
+      const withoutSets = mergedHistory.filter((entry) => entry.type !== "balance_set");
+      history = [...withoutSets, ...localSets].sort(
+        (a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0),
+      );
+    }
+  }
+
+  const people = (mergedState.people || []).map((person) => {
+    if (!pending) return person;
+    const local = localById.get(person.id);
+    if (!local) return person;
+    const localBal = Number(local.balance || 0);
+    const mergedBal = Number(person.balance || 0);
+    if (localBal === mergedBal) return person;
+    const hasLocalSet = localHistory.some(
+      (entry) => entry.personId === person.id && entry.type === "balance_set",
+    );
+    const localManual = Number(local.balanceManualAt || 0);
+    if (hasLocalSet || localManual > 0) {
+      return {
+        ...person,
+        balance: localBal,
+        balanceManualAt: local.balanceManualAt,
+      };
+    }
+    return person;
+  });
+
+  if (!pending && history === mergedHistory) return mergedState;
+  return { ...mergedState, history, people };
+}
+
 function syncBalancesFromHistory() {
   if (!window.FamilyMerge?.replayBalancesFromHistory) return;
-  state.people = FamilyMerge.replayBalancesFromHistory(state.people, state.history || []);
+  const fullHistory = window.FamilyMerge.collectAllHistory
+    ? FamilyMerge.collectAllHistory(state)
+    : (state.history || []);
+  state.people = FamilyMerge.replayBalancesFromHistory(state.people, fullHistory);
+}
+
+function applyManualBalanceCorrection(personId, personName, balance, at) {
+  state.history = (state.history || []).filter(
+    (entry) => entry.personId !== personId || entry.type !== "balance_set",
+  );
+  state.history.push({
+    id: makeId(),
+    personId,
+    personName,
+    type: "balance_set",
+    direction: "plus",
+    amount: 0,
+    balanceAfter: balance,
+    note: "",
+    createdAt: at,
+    deviceId: getDeviceId(),
+  });
 }
 
 function saveState(options = {}) {
@@ -2252,7 +2322,7 @@ function resetPersonDragSession(container) {
   if (!personDragSession) return;
   if (personDragSession.timer) clearTimeout(personDragSession.timer);
   if (personDragSession.card) {
-    personDragSession.card.classList.remove("is-drag-ready", "is-drag-pending");
+    personDragSession.card.classList.remove("is-drag-ready");
   }
   const list = container || elements.peopleList;
   if (list) list.classList.remove("is-reorder-active");
@@ -2265,11 +2335,18 @@ function handlePersonDragPointerMove(event) {
   if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
   const container = elements.peopleList;
   if (!container) return;
-  if (personDragSession.timer || personDragSession.dragging) {
+  if (personDragSession.dragging) {
     event.preventDefault();
+    updatePersonDragPosition(container, personDragSession.card, event.clientY);
+    return;
   }
-  if (!personDragSession.dragging) return;
-  updatePersonDragPosition(container, personDragSession.card, event.clientY);
+  if (personDragSession.timer) {
+    const dx = event.clientX - personDragSession.startX;
+    const dy = event.clientY - personDragSession.startY;
+    if (Math.hypot(dx, dy) > PERSON_DRAG_MOVE_CANCEL_PX) {
+      resetPersonDragSession(container);
+    }
+  }
 }
 
 function handlePersonDragPointerEnd(event) {
@@ -2284,10 +2361,8 @@ function handlePersonDragPointerEnd(event) {
 }
 
 function handlePersonDragTouchMove(event) {
-  if (!personDragSession) return;
-  if (personDragSession.timer || personDragSession.dragging) {
-    event.preventDefault();
-  }
+  if (!personDragSession?.dragging) return;
+  event.preventDefault();
 }
 
 let personDragDocListenersBound = false;
@@ -2318,9 +2393,13 @@ function bindPeopleDragReorder() {
   function onLongPressReady() {
     if (!personDragSession || personDragSession.dragging) return;
     personDragSession.dragging = true;
-    personDragSession.card.classList.remove("is-drag-pending");
+    if (personDragSession.timer) {
+      clearTimeout(personDragSession.timer);
+      personDragSession.timer = null;
+    }
     personDragSession.card.classList.add("is-drag-ready");
     container.classList.add("is-reorder-active");
+    document.body.classList.add("person-reorder-lock");
     try {
       personDragSession.card.setPointerCapture(personDragSession.pointerId);
     } catch {
@@ -2334,7 +2413,7 @@ function bindPeopleDragReorder() {
   }
 
   container.addEventListener("selectstart", (event) => {
-    if (personDragSession) event.preventDefault();
+    if (personDragSession?.dragging) event.preventDefault();
   });
 
   container.addEventListener("dragstart", (event) => {
@@ -2347,11 +2426,8 @@ function bindPeopleDragReorder() {
     if (!card || !container.contains(card)) return;
     if (event.target.closest("button, a, input, select, textarea, label")) return;
 
-    event.preventDefault();
     resetPersonDragSession(container);
     startPersonDragDocumentListeners();
-    card.classList.add("is-drag-pending");
-    document.body.classList.add("person-reorder-lock");
     const longPressMs = PERSON_DRAG_LONG_PRESS_MS;
     personDragSession = {
       personId: card.dataset.personId,
@@ -2798,6 +2874,7 @@ function matchesCommentFilter(note, query) {
 }
 
 function getHistoryEntryDelta(entry) {
+  if (entry?.type === "balance_set") return 0;
   const amount = Number(entry.amount || 0);
   if (entry.direction === "plus") return amount;
   if (entry.direction === "minus") return -amount;
@@ -2834,8 +2911,16 @@ function replayBalanceAfterForPerson(personId) {
   if (personEntries.length === 0) return;
 
   const first = personEntries[0];
-  let balance = Number(first.balanceAfter || 0) - getHistoryEntryDelta(first);
+  let balance = first.type === "balance_set"
+    ? Number(first.balanceAfter || 0)
+    : Number(first.balanceAfter || 0) - getHistoryEntryDelta(first);
   personEntries.forEach((entry) => {
+    if (entry.type === "balance_set") {
+      balance = Math.round(Number(entry.balanceAfter || balance) * 100) / 100;
+      entry.balanceAfter = balance;
+      return;
+    }
+    if (entry === first && first.type === "balance_set") return;
     balance = Math.round((balance + getHistoryEntryDelta(entry)) * 100) / 100;
     entry.balanceAfter = balance;
   });
@@ -2952,7 +3037,16 @@ function renderHistory() {
       >
     `;
     row.querySelector("strong").textContent = item.personName;
-    row.querySelector(".history-amount").textContent = `${sign}${formatMoney(item.amount)}`;
+    if (item.type === "balance_set") {
+      row.querySelector(".history-amount").textContent = `= ${formatMoney(item.balanceAfter)}`;
+      row.querySelector(".history-amount").className = "history-amount balance_set";
+    } else {
+      row.querySelector(".history-amount").textContent = `${sign}${formatMoney(item.amount)}`;
+    }
+    if (item.type === "balance_set") {
+      row.querySelector(".history-type-select").innerHTML = "<option value=\"balance_set\">Коррекция баланса</option>";
+      row.querySelector(".history-type-select").disabled = true;
+    }
     row.querySelector(".history-type-select").value = item.type;
     row.querySelector(".history-meta-date").textContent = formatDate(item.createdAt);
     row.querySelector(".history-note-input").value = item.note || "";
@@ -3134,8 +3228,9 @@ function savePerson(event) {
         folderIds,
       }), now);
       if (balanceChanged) {
+        applyManualBalanceCorrection(editingPersonId, name, balance, now);
         updated = touchPersonBalanceField(updated, now);
-        updated.balanceManualAt = now;
+        delete updated.balanceManualAt;
       }
       return updated;
     });
@@ -3155,7 +3250,8 @@ function savePerson(event) {
       createdAt: now,
     }), now);
     newPerson = touchPersonBalanceField(newPerson, now);
-    newPerson.balanceManualAt = now;
+    applyManualBalanceCorrection(newPerson.id, name, balance, now);
+    delete newPerson.balanceManualAt;
     state.people.push(newPerson);
   }
 
