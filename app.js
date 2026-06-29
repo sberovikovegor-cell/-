@@ -29,7 +29,7 @@ const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "167";
+const APP_BUILD = "168";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -318,7 +318,6 @@ const elements = {
   operationPerson: document.querySelector("#operationPerson"),
   operationTitle: document.querySelector("#operationTitle"),
   selectedAmountInput: document.querySelector("#selectedAmountInput"),
-  amountKeypad: document.querySelector("#amountKeypad"),
   transferToggleRow: document.querySelector("#transferToggleRow"),
   transferCheckbox: document.querySelector("#transferCheckbox"),
   noteInput: document.querySelector("#noteInput"),
@@ -1009,16 +1008,23 @@ function preserveLocalPeople(localState, mergedState) {
   return { ...mergedState, people: restored };
 }
 
-function openAppDialog(dialog) {
+function openAppDialog(dialog, options = {}) {
   if (!dialog) return;
-  blurActiveInput();
+  const initialFocus = options.initialFocus || null;
   try {
     if (!dialog.open && typeof dialog.showModal === "function") {
       dialog.showModal();
-      blurActiveInput();
-      setTimeout(blurActiveInput, 0);
-      setTimeout(blurActiveInput, 120);
       pushAppBackHistory();
+      if (initialFocus) {
+        setTimeout(() => {
+          initialFocus.focus();
+          if (typeof initialFocus.select === "function") initialFocus.select();
+        }, 0);
+      } else {
+        blurActiveInput();
+        setTimeout(blurActiveInput, 0);
+        setTimeout(blurActiveInput, 120);
+      }
       return;
     }
   } catch (error) {
@@ -1026,10 +1032,17 @@ function openAppDialog(dialog) {
   }
   if (!dialog.open) {
     dialog.setAttribute("open", "");
-    blurActiveInput();
-    setTimeout(blurActiveInput, 0);
-    setTimeout(blurActiveInput, 120);
     pushAppBackHistory();
+    if (initialFocus) {
+      setTimeout(() => {
+        initialFocus.focus();
+        if (typeof initialFocus.select === "function") initialFocus.select();
+      }, 0);
+    } else {
+      blurActiveInput();
+      setTimeout(blurActiveInput, 0);
+      setTimeout(blurActiveInput, 120);
+    }
   }
 }
 
@@ -1311,8 +1324,9 @@ function bindEvents() {
   elements.operationForm.addEventListener("submit", confirmOperation);
   elements.cancelOperationButton.addEventListener("click", closeOperationDialog);
   elements.exitOperationButton.addEventListener("click", closeOperationDialog);
-  if (elements.amountKeypad) {
-    elements.amountKeypad.addEventListener("click", handleAmountKeypadClick);
+  if (elements.selectedAmountInput) {
+    elements.selectedAmountInput.addEventListener("input", handleAmountInputChange);
+    elements.selectedAmountInput.addEventListener("keydown", handleAmountInputKeydown);
   }
   elements.resetAmountButton.addEventListener("click", clearAmountAll);
 
@@ -3479,55 +3493,31 @@ function deleteEditingPerson() {
   }
 }
 
-function handleAmountKeypadClick(event) {
-  const button = event.target.closest("button[data-digit], button[data-action]");
-  if (!button || !currentOperation) return;
-  const digit = button.dataset.digit;
-  const action = button.dataset.action;
-  if (digit != null) {
-    appendAmountDigit(digit);
-    return;
-  }
-  if (action === "backspace") {
-    backspaceAmountEntry();
-    return;
-  }
-  if (action === "enter") {
-    finalizeAmountEntry();
-    if (currentOperation.amount > 0) {
-      elements.operationForm?.requestSubmit();
-    }
-  }
-}
-
-function appendAmountDigit(digit) {
-  if (!currentOperation) return;
-  if (amountEntryText.length >= 12) return;
-  if (amountEntryText === "0") {
-    amountEntryText = digit;
-  } else {
-    amountEntryText += digit;
-  }
-  applyAmountEntryText();
-}
-
-function backspaceAmountEntry() {
-  amountEntryText = amountEntryText.slice(0, -1);
-  applyAmountEntryText();
-}
-
-function applyAmountEntryText() {
+function syncAmountFromInput() {
   if (!currentOperation || !elements.selectedAmountInput) return;
+  amountEntryText = elements.selectedAmountInput.value;
   const amount = parseAmount(amountEntryText);
   currentOperation.amount = Math.max(0, amount);
-  elements.selectedAmountInput.value = amountEntryText || "";
   elements.confirmOperationButton.disabled = amount <= 0;
 }
 
+function handleAmountInputChange() {
+  syncAmountFromInput();
+}
+
+function handleAmountInputKeydown(event) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  finalizeAmountEntry();
+  if (currentOperation?.amount > 0) {
+    elements.operationForm?.requestSubmit();
+  }
+}
+
 function finalizeAmountEntry() {
+  syncAmountFromInput();
   if (!currentOperation || !elements.selectedAmountInput) return;
-  const amount = parseAmount(amountEntryText);
-  currentOperation.amount = Math.max(0, amount);
+  const amount = currentOperation.amount;
   amountEntryText = amount > 0 ? String(amount).replace(".", ",") : "";
   elements.selectedAmountInput.value = amount > 0 ? formatMoney(amount) : "";
   elements.confirmOperationButton.disabled = amount <= 0;
@@ -3548,7 +3538,7 @@ function openOperationDialog(person, direction) {
   elements.noteInput.value = "";
   amountEntryText = "";
   updateSelectedAmount(0);
-  openAppDialog(elements.operationDialog);
+  openAppDialog(elements.operationDialog, { initialFocus: elements.selectedAmountInput });
 }
 
 function closeOperationDialog() {
@@ -3560,6 +3550,9 @@ function closeOperationDialog() {
 function clearAmountAll() {
   amountEntryText = "";
   updateSelectedAmount(0);
+  if (elements.selectedAmountInput) {
+    elements.selectedAmountInput.focus();
+  }
 }
 
 function updateSelectedAmount(amount) {
@@ -3567,7 +3560,7 @@ function updateSelectedAmount(amount) {
   currentOperation.amount = Math.max(0, amount);
   amountEntryText = amount > 0 ? String(amount).replace(".", ",") : "";
   if (elements.selectedAmountInput) {
-    elements.selectedAmountInput.value = amount > 0 ? formatMoney(amount) : "";
+    elements.selectedAmountInput.value = amount > 0 ? amountEntryText : "";
   }
   elements.confirmOperationButton.disabled = amount <= 0;
 }
