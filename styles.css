@@ -1012,7 +1012,17 @@ dialog {
   font-weight: 700;
 }
 
-.history-card {
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.history-period-select {
+  min-width: 148px;
+  max-width: 100%;
+}
   margin-top: 0;
 }
 
