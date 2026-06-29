@@ -863,6 +863,11 @@ body.person-reorder-lock {
   align-items: flex-start;
 }
 
+.person-card-top .person-name {
+  font-size: 1.28rem;
+  line-height: 1.22;
+}
+
 .person-card-top .person-line-balance {
   grid-column: 1;
   grid-row: 2;
@@ -890,9 +895,10 @@ body.person-reorder-lock {
   min-width: 0;
   height: 100%;
   min-height: 0;
-  padding: 0 6px;
-  font-size: 0.64rem;
-  line-height: 1.1;
+  padding: 0 8px;
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.15;
   text-align: center;
 }
 
@@ -924,9 +930,9 @@ body.person-reorder-lock {
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 1.02rem;
+  font-size: 1.22rem;
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.22;
 }
 
 .person-name-part {
@@ -1082,11 +1088,6 @@ body.person-reorder-lock {
   flex-shrink: 0;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
-  position: relative;
-  overflow: hidden;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
 }
 
 .bank-app-icon:hover {
@@ -1099,8 +1100,6 @@ body.person-reorder-lock {
 }
 
 .bank-app-icon-mark {
-  position: relative;
-  z-index: 2;
   font-size: 0.62rem;
   font-weight: 900;
   letter-spacing: -0.03em;
@@ -1108,6 +1107,11 @@ body.person-reorder-lock {
   line-height: 1;
   text-align: center;
   padding: 0 2px;
+}
+
+.bank-app-icon-mark--otp-text {
+  font-size: 0.46rem;
+  letter-spacing: -0.06em;
 }
 
 .bank-app-icon--none {
@@ -1120,45 +1124,39 @@ body.person-reorder-lock {
 }
 
 .bank-app-icon--ozon {
-  background-color: #005bff;
-  background-image: url("./assets/banks/ozon-icon.png");
+  background: linear-gradient(145deg, #005bff, #003db8);
 }
 
 .bank-app-icon--yoomoney {
-  background-color: #8b4fe8;
-  background-image: url("./assets/banks/yoomoney-icon.png");
+  background: linear-gradient(145deg, #8b4fe8, #5f2fd6);
 }
 
 .bank-app-icon--cupis {
-  background-color: #3cb86a;
-  background-image: url("./assets/banks/cupis-icon.png");
-  background-position: left center;
+  background: linear-gradient(135deg, #3cb86a 0%, #3cb86a 48%, #6a52d4 52%, #5a48c8 100%);
 }
 
 .bank-app-icon--yandex {
-  background-color: #1a1020;
-  background-image: url("./assets/banks/yandex-icon.png");
+  background: linear-gradient(145deg, #fc3f1d, #7a3fd4);
 }
 
 .bank-app-icon--wildberries {
-  background-color: #cb11ab;
-  background-image: url("./assets/banks/wildberries-icon.png");
+  background: linear-gradient(145deg, #cb11ab, #6b0a7a);
 }
 
 .bank-app-icon--sber {
-  background-color: #ffffff;
-  background-image: url("./assets/banks/sber-icon.png");
+  background: linear-gradient(145deg, #5ae878, #0a1a10);
 }
 
 .bank-app-icon--otp {
-  background-color: #d7ff00;
-  background-image: url("./assets/banks/otp-icon.png");
+  background: #c8f52e;
+}
+
+.bank-app-icon--otp .bank-app-icon-mark {
+  color: #1a1a1a;
 }
 
 .bank-app-icon--raif {
-  background-color: #ffdd2d;
-  background-image: url("./assets/banks/raif-icon.png");
-  background-position: left center;
+  background: linear-gradient(145deg, #ffdd2d, #f0c800);
 }
 
 .bank-app-icon--raif .bank-app-icon-mark {
@@ -1166,88 +1164,64 @@ body.person-reorder-lock {
 }
 
 .bank-app-icon--tinkoff {
-  background-color: #ffdd2d;
-  background-image: url("./assets/banks/tinkoff-icon.png");
+  background: linear-gradient(145deg, #ffdd2d, #e8c800);
+}
+
+.bank-app-icon--tinkoff .bank-app-icon-mark {
+  color: #1a1a1a;
 }
 
 .bank-app-icon--alfa {
-  background-color: #ef3124;
-  background-image: url("./assets/banks/alfa-icon.png");
+  background: linear-gradient(145deg, #ef3124, #c41f14);
 }
 
 .bank-app-icon--psb {
-  background-color: #1a2b88;
-  background-image: url("./assets/banks/psb-icon.png");
+  background: linear-gradient(135deg, #ff8f2a 0%, #ff8f2a 46%, #2a63c8 54%, #2a63c8 100%);
 }
 
-.person-bank-badge {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  border-radius: 7px;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  pointer-events: none;
-}
-
-.person-bank-badge .bank-app-icon-mark {
-  font-size: 0.48rem;
-}
-
-/* Фон карточек людей — ваши карты, полупрозрачно на всю ширину */
+/* Фон карточек людей — цвет банка, полупрозрачно на всю ширину */
 .person-card.person-card-bank-ozon::before {
-  background-image: linear-gradient(135deg, rgba(0, 91, 255, 0.28), rgba(0, 55, 170, 0.16));
-  opacity: 1;
+  background: linear-gradient(135deg, rgba(0, 91, 255, 0.28), rgba(0, 55, 170, 0.14));
 }
 
 .person-card.person-card-bank-yoomoney::before {
-  background-image: url("./assets/banks/yoomoney-card-bg.png");
-  opacity: 0.22;
+  background: linear-gradient(135deg, rgba(139, 79, 232, 0.3), rgba(90, 45, 180, 0.14));
 }
 
 .person-card.person-card-bank-cupis::before {
-  background-image: url("./assets/banks/cupis-card-bg.png");
-  opacity: 0.24;
+  background: linear-gradient(135deg, rgba(60, 184, 106, 0.32), rgba(106, 82, 212, 0.22));
 }
 
 .person-card.person-card-bank-yandex::before {
-  background-image: url("./assets/banks/yandex-card-bg.png");
-  opacity: 0.22;
+  background: linear-gradient(135deg, rgba(252, 63, 29, 0.24), rgba(122, 63, 212, 0.2));
 }
 
 .person-card.person-card-bank-wildberries::before {
-  background-image: linear-gradient(135deg, rgba(203, 17, 171, 0.28), rgba(120, 8, 90, 0.16));
-  opacity: 1;
+  background: linear-gradient(135deg, rgba(203, 17, 171, 0.28), rgba(120, 8, 90, 0.14));
 }
 
 .person-card.person-card-bank-sber::before {
-  background-image: url("./assets/banks/sber-card-bg.png");
-  opacity: 0.24;
+  background: linear-gradient(145deg, rgba(90, 232, 120, 0.3), rgba(10, 26, 16, 0.35));
 }
 
 .person-card.person-card-bank-otp::before {
-  background-image: url("./assets/banks/otp-card-bg.png");
-  opacity: 0.26;
+  background: linear-gradient(135deg, rgba(200, 245, 46, 0.34), rgba(160, 210, 30, 0.18));
 }
 
 .person-card.person-card-bank-raif::before {
-  background-image: url("./assets/banks/raif-card-bg.png");
-  opacity: 0.24;
+  background: linear-gradient(135deg, rgba(255, 221, 45, 0.34), rgba(255, 200, 0, 0.16));
 }
 
 .person-card.person-card-bank-tinkoff::before {
-  background-image: url("./assets/banks/tinkoff-card-bg.png");
-  opacity: 0.22;
+  background: linear-gradient(135deg, rgba(255, 221, 45, 0.22), rgba(10, 10, 10, 0.32));
 }
 
 .person-card.person-card-bank-alfa::before {
-  background-image: url("./assets/banks/alfa-card-bg.png");
-  opacity: 0.24;
+  background: linear-gradient(135deg, rgba(239, 49, 36, 0.32), rgba(180, 28, 18, 0.16));
 }
 
 .person-card.person-card-bank-psb::before {
-  background-image: linear-gradient(135deg, rgba(255, 143, 42, 0.26), rgba(255, 143, 42, 0.14) 46%, rgba(42, 99, 200, 0.24) 54%, rgba(30, 70, 150, 0.14));
-  opacity: 1;
+  background: linear-gradient(135deg, rgba(255, 143, 42, 0.26), rgba(42, 99, 200, 0.22));
 }
 
 .person-actions button {
@@ -1335,7 +1309,7 @@ body.person-reorder-lock {
 }
 
 .person-card-detailed .person-name {
-  font-size: 1.08rem;
+  font-size: 1.35rem;
 }
 
 .person-details-block {
@@ -1735,11 +1709,15 @@ label {
     grid-template-columns: minmax(40%, 1fr) minmax(0, 60%);
   }
 
+  .person-card-top .person-name {
+    font-size: 1.15rem;
+  }
+
   .person-card-top .person-top-actions .mini {
     min-height: 0;
     height: 100%;
-    padding: 0 4px;
-    font-size: 0.6rem;
+    padding: 0 6px;
+    font-size: 0.95rem;
   }
 
   .amount-key {
