@@ -21,6 +21,8 @@
   let onBotExportRemote = null;
   let onOnlineCallback = null;
   let onLocalStateMerged = null;
+  let onPushComplete = null;
+  let onBeforeSyncedStatus = null;
   let syncActive = false;
 
   /** Не чаще 1 сообщения/сек и не более 20/мин в канал. */
@@ -142,11 +144,24 @@
         if (!isSyncReady() || !isNetworkAvailable()) return;
         pullFromTelegram()
           .then((pulled) => {
-            if (pulled) updateSyncStatus("synced", "Синхронизировано");
+            if (pulled) safeSyncedStatus("Синхронизировано");
           })
           .catch(() => {});
       }, ms);
     });
+  }
+
+  function safeSyncedStatus(message) {
+    if (onBeforeSyncedStatus?.()) return;
+    updateSyncStatus("synced", message);
+  }
+
+  function notifyPushComplete(ok, pushedState) {
+    if (onPushComplete) {
+      onPushComplete(ok, pushedState);
+      return;
+    }
+    if (ok) safeSyncedStatus("Синхронизировано");
   }
 
   function getSyncBlockedReason() {
@@ -515,19 +530,19 @@
       localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
       try {
         await publishPinnedState(stateToPush);
-        updateSyncStatus("synced", "Данные в канале");
       } catch (pinError) {
         console.warn("publishPinnedState", pinError);
         updateSyncStatus("online", "Отправлено — ждём слияния…");
         schedulePostPushPull();
       }
-      return;
+      return stateToPush;
     }
 
     localStorage.setItem(LOCAL_PUSH_REVISION_KEY, String(revision));
 
     updateSyncStatus("online", "Ожидание ответа бота…");
     startPendingBotPoll();
+    return stateToPush;
   }
 
   async function pullNow() {
@@ -541,7 +556,7 @@
       if (!isNetworkAvailable() || !isSyncReady()) return;
       try {
         const pulled = await pullFromTelegram();
-        updateSyncStatus("synced", pulled ? "Синхронизировано" : "Telegram");
+        safeSyncedStatus(pulled ? "Синхронизировано" : "Telegram");
       } catch (error) {
         console.warn("tg pull", error);
         updateSyncStatus("offline", "Telegram недоступен");
@@ -614,7 +629,11 @@
         if (pendingRev > 0) {
           startPendingBotPoll();
         }
-        updateSyncStatus(isNetworkAvailable() ? "synced" : "offline", isNetworkAvailable() ? "Синхронизировано" : "Офлайн");
+        if (isNetworkAvailable()) {
+          safeSyncedStatus("Синхронизировано");
+        } else {
+          updateSyncStatus("offline", "Офлайн");
+        }
       });
     };
 
@@ -674,12 +693,13 @@
     const pushOptions = pendingPushOptions;
     pendingPushOptions = null;
     updateSyncStatus("online", "Отправка…");
-    pushToTelegram(localState, null, pushOptions).then(() => {
-      updateSyncStatus("synced", "Синхронизировано");
+    pushToTelegram(localState, null, pushOptions).then((pushedState) => {
+      notifyPushComplete(true, pushedState);
     }).catch((error) => {
       console.warn("tg push", error);
       const msg = error?.message || "ошибка";
       updateSyncStatus("offline", `Telegram: ${msg}`);
+      notifyPushComplete(false);
     });
   }
 
@@ -692,12 +712,13 @@
     clearStalePendingBotLock();
     cancelPendingPush();
     updateSyncStatus("online", "Отправка…");
-    return pushToTelegram(localState, null, pushOptions || {}).then(() => {
-      updateSyncStatus("synced", "Данные в канале");
+    return pushToTelegram(localState, null, pushOptions || {}).then((pushedState) => {
+      notifyPushComplete(true, pushedState);
     }).catch((error) => {
       console.warn("tg push immediate", error);
       const msg = error?.message || "ошибка";
       updateSyncStatus("offline", `Telegram: ${msg}`);
+      notifyPushComplete(false);
       throw error;
     });
   }
@@ -771,6 +792,12 @@
     },
     set onOnline(fn) {
       onOnlineCallback = fn;
+    },
+    set onPushComplete(fn) {
+      onPushComplete = fn;
+    },
+    set onBeforeSyncedStatus(fn) {
+      onBeforeSyncedStatus = fn;
     },
   };
 })();
