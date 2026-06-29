@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "112";
+const APP_BUILD = "113";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -2605,29 +2605,24 @@ function savePerson(event) {
 
   const wantInBot = elements.personUseInBotCheckbox.checked;
   const botCheckboxChanged = wantInBot !== saved.useInBot;
-  const profileEditWhileInBot = saved.useInBot && !botCheckboxChanged;
 
-  if (!botCheckboxChanged && !profileEditWhileInBot) return;
+  if (!botCheckboxChanged) return;
 
   const runBotSync = () => {
-    if (botCheckboxChanged) {
-      if (wantInBot) {
-        if (!alertIfBotProfileIncomplete(saved)) {
-          touchPersonUseInBot(saved.id, false);
-          if (elements.personUseInBotCheckbox) elements.personUseInBotCheckbox.checked = false;
-          saveState({ skipPush: true });
-          render();
-          return;
-        }
-        touchPersonUseInBot(saved.id, true);
-        saveState();
+    if (wantInBot) {
+      if (!alertIfBotProfileIncomplete(saved)) {
+        touchPersonUseInBot(saved.id, false);
+        if (elements.personUseInBotCheckbox) elements.personUseInBotCheckbox.checked = false;
+        saveState({ skipPush: true });
         render();
-        queueBotExportUpsert(state.people.find((p) => p.id === saved.id));
-      } else {
-        disablePersonInBot(saved);
+        return;
       }
-    } else if (profileEditWhileInBot) {
-      syncPersonToBot(saved);
+      touchPersonUseInBot(saved.id, true);
+      saveState();
+      render();
+      queueBotExportUpsert(state.people.find((p) => p.id === saved.id));
+    } else {
+      disablePersonInBot(saved);
     }
   };
 
