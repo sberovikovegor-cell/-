@@ -1,4 +1,4 @@
-const CACHE_NAME = "family-counter-cache-v125";
+const CACHE_NAME = "family-counter-cache-v151";
 const ASSETS = [
   "./",
   "./index.html",
@@ -12,6 +12,25 @@ const ASSETS = [
   "./telegram-crypto.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./assets/banks/cupis-icon.png",
+  "./assets/banks/cupis-card-bg.png",
+  "./assets/banks/yoomoney-icon.png",
+  "./assets/banks/yoomoney-card-bg.png",
+  "./assets/banks/yandex-icon.png",
+  "./assets/banks/yandex-card-bg.png",
+  "./assets/banks/otp-icon.png",
+  "./assets/banks/otp-card-bg.png",
+  "./assets/banks/raif-icon.png",
+  "./assets/banks/raif-card-bg.png",
+  "./assets/banks/tinkoff-icon.png",
+  "./assets/banks/tinkoff-card-bg.png",
+  "./assets/banks/alfa-icon.png",
+  "./assets/banks/alfa-card-bg.png",
+  "./assets/banks/sber-icon.png",
+  "./assets/banks/sber-card-bg.png",
+  "./assets/banks/ozon-icon.png",
+  "./assets/banks/wildberries-icon.png",
+  "./assets/banks/psb-icon.png",
 ];
 
 function shouldUseNetworkFirst(request) {
