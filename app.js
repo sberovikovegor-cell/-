@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "113";
+const APP_BUILD = "115";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -221,6 +221,7 @@ let currentOperation = null;
 let amountChangeStack = [];
 let deferredInstallPrompt = null;
 let activeView = "main";
+let activeHistoryPeriod = null;
 let botSuccessTimer = null;
 let botExportWorkerBusy = false;
 let filtersAutoCleared = false;
@@ -265,6 +266,8 @@ const elements = {
   purchaseCount: document.querySelector("#purchaseCount"),
   transferCount: document.querySelector("#transferCount"),
   clearHistoryButton: document.querySelector("#clearHistoryButton"),
+  nextMonthButton: document.querySelector("#nextMonthButton"),
+  historyPeriodSelect: document.querySelector("#historyPeriodSelect"),
   personDialog: document.querySelector("#personDialog"),
   personForm: document.querySelector("#personForm"),
   personDialogTitle: document.querySelector("#personDialogTitle"),
@@ -457,16 +460,29 @@ function initFamilySync() {
 
   FamilySync.onOnline = () => {
     retryBotExportIfNeeded();
-    if (!hasBotPendingSync() && FamilySync.isSyncReady()) {
-      state = ensureStateDataEpoch(state);
+    if (!FamilySync.isSyncReady()) {
+      renderSyncNoticeRow();
+      return;
+    }
+    state = ensureStateDataEpoch(state);
+    (async () => {
+      try {
+        if (FamilySync.pullNow) await FamilySync.pullNow();
+      } catch (error) {
+        console.warn("online pull", error);
+      }
+      if (hasBotPendingSync()) {
+        renderSyncNoticeRow();
+        return;
+      }
       const offlinePending = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
       if (offlinePending) {
         FamilySync.push(state);
       } else if (coldAppLaunch && !isStartupPushDone()) {
         scheduleStartupCloudPush();
       }
-    }
-    renderSyncNoticeRow();
+      renderSyncNoticeRow();
+    })();
   };
 
   const code = FamilySync.getFamilyCode();
@@ -536,11 +552,13 @@ function stateCloudFingerprint(appState) {
     .sort()
     .join(",");
   const histLen = (normalized.history || []).length;
+  const histClear = Number(normalized.historyClearedAtMs || 0);
+  const histMonths = (normalized.historyMonths || []).length;
   const folders = (normalized.folders || []).length;
   const ui = Number(normalized.uiUpdatedAt || 0);
   const wipe = Number(normalized.wipedAtMs || 0);
   const epoch = Number(normalized.dataEpoch || 0);
-  return `e${epoch}|w${wipe}|u${ui}|p${people}|h${histLen}|f${folders}`;
+  return `e${epoch}|w${wipe}|u${ui}|p${people}|h${histLen}|hc${histClear}|hm${histMonths}|f${folders}`;
 }
 
 function tryConfirmCloudSync(remoteState) {
@@ -1037,9 +1055,8 @@ function isNetworkAvailable() {
   if (window.FamilySync?.isNetworkAvailable) {
     return window.FamilySync.isNetworkAvailable();
   }
-  if (navigator.onLine) return true;
-  if (window.location.protocol === "file:") return true;
-  return false;
+  if (typeof navigator.onLine === "boolean") return navigator.onLine;
+  return true;
 }
 
 function openSyncDialog() {
@@ -1167,6 +1184,18 @@ function bindEvents() {
   elements.deletePersonButton.addEventListener("click", deleteEditingPerson);
 
   elements.clearHistoryButton.addEventListener("click", clearHistory);
+  if (elements.nextMonthButton) {
+    elements.nextMonthButton.addEventListener("click", nextMonthArchive);
+  }
+  if (elements.historyPeriodSelect) {
+    elements.historyPeriodSelect.addEventListener("change", () => {
+      const value = elements.historyPeriodSelect.value;
+      activeHistoryPeriod = value === "current" ? null : Number(value);
+      renderFilters();
+      renderHistory();
+      renderHistoryPeriodSelect();
+    });
+  }
   elements.personFilter.addEventListener("change", renderHistory);
   if (elements.commentFilter) {
     elements.commentFilter.addEventListener("input", renderHistory);
@@ -1236,6 +1265,8 @@ function getDefaultState() {
   return {
     people: [],
     history: [],
+    historyMonths: [],
+    historyClearedAtMs: 0,
     folders: [],
     activeFolderIds: [],
     activeFirstNames: [],
@@ -1479,6 +1510,12 @@ function normalizeLoadedState(parsed) {
   return {
     people,
     history: Array.isArray(withTombstones.history) ? withTombstones.history : [],
+    historyMonths: Array.isArray(withTombstones.historyMonths)
+      ? withTombstones.historyMonths
+        .map((month) => normalizeHistoryMonth(month))
+        .filter(Boolean)
+      : [],
+    historyClearedAtMs: Number(withTombstones.historyClearedAtMs || 0),
     folders,
     activeFolderIds: Array.isArray(withTombstones.activeFolderIds)
       ? withTombstones.activeFolderIds.filter((id) => folderIds.has(id))
@@ -1789,6 +1826,7 @@ function saveState(options = {}) {
   localStorage.setItem(STORAGE_KEY, json);
   localStorage.setItem(STORAGE_BACKUP_KEY, json);
   if (options.skipPush || !window.FamilySync) return;
+  markLocalEditPending();
   const pushOptions = options.replaceRemote ? { replaceRemote: true } : null;
   if (options.immediatePush && FamilySync.pushImmediate) {
     FamilySync.pushImmediate(state, pushOptions).catch((error) => {
@@ -1801,8 +1839,61 @@ function saveState(options = {}) {
   }
 }
 
+function normalizeHistoryMonth(month) {
+  const index = Number(month?.index);
+  if (!Number.isFinite(index) || index < 1) return null;
+  return {
+    index,
+    title: String(month.title || `Месяц ${index}`),
+    archivedAt: Number(month.archivedAt || 0),
+    history: Array.isArray(month.history) ? month.history.filter((item) => item?.id) : [],
+  };
+}
+
+function getHistoryMonths() {
+  return Array.isArray(state.historyMonths) ? state.historyMonths : [];
+}
+
+function getActiveHistoryEntries() {
+  if (activeHistoryPeriod == null) return state.history;
+  const month = getHistoryMonths().find((item) => item.index === activeHistoryPeriod);
+  return month?.history || [];
+}
+
+function renderHistoryPeriodSelect() {
+  if (!elements.historyPeriodSelect) return;
+  const months = getHistoryMonths();
+  const selected = elements.historyPeriodSelect.value;
+  elements.historyPeriodSelect.innerHTML = "<option value=\"current\">Текущий период</option>";
+  months.forEach((month) => {
+    const option = document.createElement("option");
+    option.value = String(month.index);
+    const count = (month.history || []).length;
+    option.textContent = `${month.title} (${count})`;
+    elements.historyPeriodSelect.append(option);
+  });
+  if (activeHistoryPeriod != null && months.some((month) => month.index === activeHistoryPeriod)) {
+    elements.historyPeriodSelect.value = String(activeHistoryPeriod);
+  } else if (selected === "current") {
+    elements.historyPeriodSelect.value = "current";
+    activeHistoryPeriod = null;
+  } else if (months.some((month) => String(month.index) === selected)) {
+    elements.historyPeriodSelect.value = selected;
+    activeHistoryPeriod = Number(selected);
+  } else {
+    elements.historyPeriodSelect.value = "current";
+    activeHistoryPeriod = null;
+  }
+  const viewingArchive = activeHistoryPeriod != null;
+  if (elements.nextMonthButton) elements.nextMonthButton.disabled = viewingArchive;
+  if (elements.clearHistoryButton) {
+    elements.clearHistoryButton.disabled = viewingArchive;
+  }
+}
+
 function render() {
   renderSyncNoticeRow();
+  renderHistoryPeriodSelect();
   renderTotal();
   renderFolders();
   renderFirstNameFilters();
@@ -2375,6 +2466,11 @@ function renderFilters() {
       peopleById.set(item.personId, `${item.personName} (удален)`);
     }
   });
+  getActiveHistoryEntries().forEach((item) => {
+    if (!peopleById.has(item.personId)) {
+      peopleById.set(item.personId, `${item.personName} (удален)`);
+    }
+  });
 
   peopleById.forEach((name, id) => {
     const option = document.createElement("option");
@@ -2393,10 +2489,11 @@ function matchesCommentFilter(note, query) {
 }
 
 function renderHistory() {
+  const sourceHistory = getActiveHistoryEntries();
   const personId = elements.personFilter.value;
   const type = elements.typeFilter.value;
   const commentQuery = elements.commentFilter?.value || "";
-  const rows = state.history
+  const rows = sourceHistory
     .filter((item) => personId === "all" || item.personId === personId)
     .filter((item) => type === "all" || item.type === type)
     .filter((item) => matchesCommentFilter(item.note, commentQuery))
@@ -2404,9 +2501,14 @@ function renderHistory() {
 
   elements.historyList.innerHTML = "";
   if (rows.length === 0) {
-    const hasHistory = state.history.length > 0;
+    const hasHistory = sourceHistory.length > 0;
     const hasActiveFilters = personId !== "all" || type !== "all" || commentQuery.trim();
-    const title = hasHistory && hasActiveFilters ? "Ничего не найдено" : "Истории пока нет";
+    const archiveLabel = activeHistoryPeriod != null
+      ? getHistoryMonths().find((month) => month.index === activeHistoryPeriod)?.title
+      : null;
+    const title = hasHistory && hasActiveFilters
+      ? "Ничего не найдено"
+      : (archiveLabel ? `В «${archiveLabel}» пока нет операций` : "Истории пока нет");
     const hint = hasHistory && hasActiveFilters
       ? "Попробуйте другой фильтр или очистите поиск по комментарию."
       : "Операции появятся здесь после подтверждения.";
@@ -2856,13 +2958,57 @@ function confirmOperation(event) {
   render();
 }
 
+function clearActiveHistory() {
+  markLocalEditPending();
+  const now = Date.now();
+  state.history = [];
+  state.historyClearedAtMs = Math.max(Number(state.historyClearedAtMs || 0), now);
+}
+
 function clearHistory() {
+  if (activeHistoryPeriod != null) return;
   if (state.history.length === 0) return;
-  const ok = confirm("Очистить всю историю? Балансы людей не изменятся.");
+  const ok = confirm("Очистить всю историю текущего периода? Балансы людей не изменятся.");
   if (!ok) return;
 
+  clearActiveHistory();
+  saveState({ immediatePush: true });
+  render();
+}
+
+function nextMonthArchive() {
+  if (activeHistoryPeriod != null) return;
+  if (state.history.length === 0) {
+    alert("Нет операций для закрытия периода.");
+    return;
+  }
+  const ok = confirm(
+    "Закрыть период и начать новый месяц?\n\n" +
+    "Все операции сохранятся в архив (Месяц 1, Месяц 2…), балансы не изменятся.",
+  );
+  if (!ok) return;
+
+  markLocalEditPending();
+  const now = Date.now();
+  const months = getHistoryMonths().map((month) => ({
+    ...month,
+    history: [...(month.history || [])],
+  }));
+  const nextIndex = months.length > 0
+    ? Math.max(...months.map((month) => Number(month.index) || 0)) + 1
+    : 1;
+  months.push({
+    index: nextIndex,
+    title: `Месяц ${nextIndex}`,
+    archivedAt: now,
+    history: [...state.history],
+  });
+  state.historyMonths = months;
   state.history = [];
-  saveState();
+  state.historyClearedAtMs = Math.max(Number(state.historyClearedAtMs || 0), now);
+  activeHistoryPeriod = null;
+  if (elements.historyPeriodSelect) elements.historyPeriodSelect.value = "current";
+  saveState({ immediatePush: true });
   render();
 }
 
