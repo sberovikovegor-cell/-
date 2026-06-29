@@ -1,1404 +1,386 @@
-:root {
-  color-scheme: dark;
-  --bg: #0f172a;
-  --panel: #16213e;
-  --panel-light: #1f2d52;
-  --text: #f8fafc;
-  --muted: #a9b4c7;
-  --line: rgba(255, 255, 255, 0.1);
-  --green: #33d17a;
-  --red: #ff6b6b;
-  --blue: #6ea8fe;
-  --yellow: #ffd166;
-  --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  overflow-x: hidden;
-  max-width: 100%;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  min-height: 100dvh;
-  background:
-    radial-gradient(circle at top left, rgba(110, 168, 254, 0.18), transparent 32rem),
-    linear-gradient(145deg, #08111f, var(--bg));
-  color: var(--text);
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  /* iOS PWA / браузер: отступ под строку статуса и нижнюю панель */
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
-}
-
-/* APK WebView: системные панели не скрываем — padding на WebView из MainActivity */
-body.android-webview {
-  padding: 0;
-}
-
-button,
-input,
-select {
-  font: inherit;
-}
-
-button {
-  border: 0;
-  cursor: pointer;
-}
-
-.app {
-  width: min(100%, 760px);
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 18px;
-  padding-bottom: 24px;
-}
-
-body:not(.android-webview) .app {
-  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-}
-
-.hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 2px 22px;
-}
-
-.hero h1,
-.section-title h2 {
-  margin: 0;
-}
-
-.eyebrow,
-.label {
-  display: block;
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.muted {
-  margin: 8px 0 0;
-  color: var(--muted);
-}
-
-.card,
-.person-card,
-dialog {
-  border: 1px solid var(--line);
-  background: rgba(22, 33, 62, 0.82);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(16px);
-}
-
-.card {
-  border-radius: 24px;
-  padding: 16px;
-}
-
-.totals-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.top-bar {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-}
-
-.top-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-}
-
-.top-metric {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.top-label {
-  color: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.top-metric strong {
-  font-size: 0.95rem;
-  line-height: 1.1;
-  font-weight: 900;
-}
-
-.top-metric strong.purchase {
-  color: #ff9f9f;
-}
-
-.top-metric strong.transfer {
-  color: #9fd4ff;
-}
-
-.primary.compact {
-  flex-shrink: 0;
-  min-height: 36px;
-  padding: 0 10px;
-  font-size: 0.72rem;
-  border-radius: 12px;
-}
-
-.ghost.compact {
-  flex-shrink: 0;
-  min-height: 36px;
-  padding: 0 10px;
-  font-size: 0.72rem;
-  border-radius: 12px;
-}
-
-.ghost.compact.active {
-  background: rgba(110, 168, 254, 0.24);
-  color: #d8e7ff;
-}
-
-.top-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.sync-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
-}
-
-.sync-notice-row {
-  padding: 5px 8px;
-  border-radius: 10px;
-  font-size: 0.7rem;
-  line-height: 1.3;
-  text-align: center;
-}
-
-.sync-notice-row[data-level="warn"] {
-  color: #ffd166;
-  background: rgba(255, 209, 102, 0.12);
-  border: 1px solid rgba(255, 209, 102, 0.28);
-}
-
-.sync-notice-row[data-level="error"] {
-  color: #ff9f9f;
-  background: rgba(255, 107, 107, 0.12);
-  border: 1px solid rgba(255, 138, 138, 0.28);
-}
-
-.sync-notice-row[data-level="ok"] {
-  color: #8be9a8;
-  background: rgba(76, 175, 130, 0.12);
-  border: 1px solid rgba(139, 233, 168, 0.28);
-}
-
-.sync-notice-row[hidden] {
-  display: none;
-}
-
-.sync-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.sync-code-button {
-  width: 100%;
-  max-width: 100%;
-  min-height: 36px;
-  font-size: 0.82rem;
-  font-weight: 800;
-  touch-action: manipulation;
-}
-
-.bot-notice-legacy {
-  display: none !important;
-}
-
-.sync-status {
-  font-size: 0.68rem;
-  color: var(--muted);
-}
-
-.sync-status[data-status="synced"] {
-  color: #8fd4a8;
-}
-
-.sync-status[data-status="offline"] {
-  color: #ffd166;
-}
-
-.sync-status[data-status="error"] {
-  color: #ff9f9f;
-}
-
-.sync-row .ghost.mini {
-  min-height: 36px;
-  min-width: 88px;
-  padding: 8px 12px;
-  touch-action: manipulation;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.app-version {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: rgba(169, 180, 199, 0.75);
-}
-
-.history-comment-filter {
-  display: block;
-  margin-bottom: 12px;
-}
-
-.history-comment-filter .label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.history-comment-filter input {
-  width: 100%;
-  min-height: 46px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  outline: none;
-}
-
-.person-bot-hint {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.35;
-}
-
-.sync-hint {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.35;
-}
-
-.folder-card {
-  margin-bottom: 8px;
-  padding: 8px 10px;
-}
-
-.banks-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-}
-
-.folder-list-flow {
-  display: contents;
-}
-
-.banks-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.banks-controls .mini {
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
-  font-size: 0.9rem;
-  line-height: 1;
-}
-
-.inline-label {
-  color: var(--muted);
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 1;
-}
-
-.folder-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  flex-wrap: wrap;
-}
-
-.folder-row .inline-label {
-  flex-shrink: 0;
-}
-
-.folder-row .folder-list {
-  flex: 1;
-  min-width: 0;
-}
-
-.folder-card .folder-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.folder-card .folder-row .folder-list {
-  margin-top: 0;
-}
-
-.folder-card .folder-chip {
-  min-height: 28px;
-  padding: 0 9px;
-  font-size: 0.7rem;
-  gap: 4px;
-}
-
-.folder-card .empty-state {
-  padding: 6px 8px;
-  border-radius: 10px;
-  font-size: 0.7rem;
-  text-align: left;
-  width: auto;
-  flex: 0 1 auto;
-}
-
-.single-filter-text {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.toggle-chip {
-  min-height: 24px;
-  min-width: 24px;
-  padding: 0 4px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  font-size: 0.78rem;
-  line-height: 1;
-}
-
-.toggle-chip.on {
-  background: rgba(110, 168, 254, 0.24);
-}
-
-.stats-card {
-  margin-bottom: 8px;
-}
-
-.stats-card-top {
-  padding: 8px 12px;
-}
-
-.stats-card-top .stats-grid strong {
-  font-size: 1.1rem;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.stats-label {
-  display: block;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.stats-grid strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 1.4rem;
-}
-
-.section-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-#familyTotal {
-  display: block;
-  font-size: 0.95rem;
-  line-height: 1.1;
-  font-weight: 900;
-}
-
-.primary,
-.ghost,
-.danger,
-.icon-button,
-.tab,
-.quick-grid button {
-  min-height: 44px;
-  border-radius: 14px;
-  padding: 0 16px;
-  color: var(--text);
-  font-weight: 800;
-}
-
-.primary {
-  background: linear-gradient(135deg, #4f8cff, #6c63ff);
-}
-
-.ghost,
-.icon-button,
-.tab,
-.quick-grid button {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.danger {
-  background: rgba(255, 107, 107, 0.18);
-  color: #ffd7d7;
-}
-
-.people {
-  display: grid;
-  gap: 8px;
-  margin: 10px 0;
-}
-
-.person-card {
-  border-radius: 16px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.person-head-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-  max-width: 100%;
-}
-
-.person-line-head {
-  flex: 1;
-  min-width: 0;
-  gap: 4px;
-}
-
-.bot-pending-banner {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  padding: 6px 10px;
-  text-align: center;
-  font-size: 0.72rem;
-  line-height: 1.25;
-  color: #ffd166;
-  background: rgba(22, 33, 62, 0.95);
-  border-bottom: 1px solid rgba(255, 209, 102, 0.35);
-  pointer-events: none;
-}
-
-.bot-success-banner {
-  position: sticky;
-  top: 0;
-  z-index: 21;
-  padding: 6px 10px;
-  text-align: center;
-  font-size: 0.72rem;
-  line-height: 1.25;
-  color: #8be9a8;
-  background: rgba(22, 33, 62, 0.95);
-  border-bottom: 1px solid rgba(139, 233, 168, 0.35);
-  pointer-events: none;
-}
-
-.dialog-hint {
-  margin: 0 0 12px;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.bot-toggle {
-  flex-shrink: 0;
-  box-sizing: border-box;
-  width: 26px;
-  min-width: 26px;
-  max-width: 26px;
-  height: 26px;
-  min-height: 26px;
-  padding: 0;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.95rem;
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.person-line-balance .person-balance {
-  flex-shrink: 0;
-}
-
-.person-line-balance .row-sep {
-  flex-shrink: 0;
-}
-
-.person-line-balance .last-income {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.person-line-balance .bot-toggle {
-  width: 26px;
-  min-width: 26px;
-  max-width: 26px;
-  height: 26px;
-  min-height: 26px;
-  margin-left: 4px;
-  flex-shrink: 0;
-}
-
-.bot-toggle.active {
-  border-color: #4caf82;
-  color: #4caf82;
-  background: rgba(76, 175, 130, 0.18);
-}
-
-.bot-toggle.inactive {
-  border-color: #e57373;
-  color: #e57373;
-  background: rgba(229, 115, 115, 0.12);
-}
-
-.bot-toggle.pending {
-  border-color: #ffd166;
-  color: transparent;
-  background: rgba(255, 209, 102, 0.14);
-}
-
-.bot-toggle.pending::before {
-  content: "";
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #ffd166;
-  animation: bot-toggle-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes bot-toggle-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.45;
-    transform: scale(0.82);
-  }
-}
-
-.boot-error-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: rgba(10, 14, 28, 0.97);
-  pointer-events: none;
-}
-
-.boot-error-screen--loading {
-  background: rgba(10, 14, 28, 0.55);
-}
-
-.boot-error-screen--error {
-  background: rgba(40, 8, 8, 0.97);
-  pointer-events: auto;
-}
-
-.boot-error-screen.boot-error-screen--hidden {
-  display: none;
-}
-
-.boot-error-card {
-  max-width: 100%;
-  width: 100%;
-  color: #fff;
-  text-align: center;
-}
-
-.boot-error-card strong {
-  display: block;
-  font-size: 1.1rem;
-  margin-bottom: 8px;
-}
-
-.boot-error-hint {
-  display: block;
-  font-size: 0.75rem;
-  color: rgba(255, 200, 200, 0.85);
-  margin-bottom: 12px;
-}
-
-.boot-error-log {
-  display: block;
-  margin: 0;
-  padding: 12px;
-  max-height: 50vh;
-  overflow: auto;
-  text-align: left;
-  font-size: 0.72rem;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 120, 120, 0.5);
-  border-radius: 8px;
-  color: #ffb4b4;
-}
-
-.sync-danger-zone {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.danger-text {
-  color: #ff8a8a;
-  border-color: rgba(255, 138, 138, 0.45);
-}
-
-.sync-alert-banner {
-  position: sticky;
-  top: 0;
-  z-index: 19;
-  padding: 6px 10px;
-  text-align: center;
-  font-size: 0.72rem;
-  line-height: 1.25;
-  color: #ff8a8a;
-  background: rgba(22, 33, 62, 0.95);
-  border-bottom: 1px solid rgba(255, 138, 138, 0.35);
-  pointer-events: none;
-}
-
-.person-line-balance {
-  color: rgba(169, 180, 199, 0.9);
-  font-size: 0.78rem;
-  line-height: 1.1;
-  width: 100%;
-  flex-wrap: nowrap;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.person-money-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--person-bot-col, 4.75rem);
-  gap: 6px;
-  align-items: center;
-  width: 100%;
-}
-
-.person-money-col {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.person-line-stats {
-  color: rgba(169, 180, 199, 0.9);
-  font-size: 0.7rem;
-  line-height: 1.2;
-  width: 100%;
-}
-
-.person-card-top {
-  display: grid;
-  grid-template-columns: minmax(42%, 1fr) minmax(0, 58%);
-  grid-template-rows: auto auto;
-  column-gap: 8px;
-  row-gap: 2px;
-  align-items: stretch;
-  width: 100%;
-}
-
-.person-card-top .person-line-head {
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-  align-items: flex-start;
-}
-
-.person-card-top .person-line-balance {
-  grid-column: 1;
-  grid-row: 2;
-  min-width: 0;
-  flex-wrap: nowrap;
-}
-
-.person-card-top .person-top-actions {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  align-self: stretch;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.person-card-top .person-top-actions .mini {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  min-height: 0;
-  padding: 0 6px;
-  font-size: 0.64rem;
-  line-height: 1.1;
-  text-align: center;
-}
-
-/* fallback без person-card-top (не используется на главном экране) */
-.person-top-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  flex-shrink: 0;
-  width: auto;
-  max-width: min(100%, 23rem);
-  min-width: 0;
-}
-
-.person-line {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.person-name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem;
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: 1.02rem;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.person-name-part {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  text-align: left;
-  min-width: 0;
-  max-width: 100%;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.person-name-part:active {
-  opacity: 0.72;
-}
-
-.person-balance {
-  font-weight: 900;
-  color: var(--text);
-  line-height: 1.1;
-}
-
-.row-sep {
-  color: rgba(169, 180, 199, 0.45);
-  font-size: 0.7rem;
-}
-
-.last-income {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.person-stats-line {
-  display: block;
-  width: 100%;
-  min-width: 0;
-}
-
-.person-top-actions .mini {
-  width: 100%;
-  min-width: 8.75rem;
-  min-height: 26px;
-  height: 26px;
-  padding: 0 6px;
-  font-size: 0.64rem;
-  line-height: 1;
-  text-align: center;
-}
-
-.mini {
-  flex-shrink: 0;
-  min-height: 30px;
-  padding: 0 8px;
-  border-radius: 10px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  color: var(--text);
-}
-
-.mini.ghost {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
-}
-
-.person-actions,
-.small-actions,
-.filters,
-.tabs,
-.amount-mode,
-.folder-list,
-.folder-picker,
-.dialog-actions,
-.manual-row {
-  display: flex;
-  gap: 10px;
-}
-
-.folder-list,
-.folder-picker {
-  flex-wrap: wrap;
-  max-width: 100%;
-}
-
-.folder-chip,
-.folder-choice {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  border-radius: 999px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-  font-weight: 800;
-}
-
-.folder-chip.active,
-.folder-choice:has(input:checked) {
-  background: rgba(110, 168, 254, 0.24);
-  color: #d8e7ff;
-}
-
-.folder-choice input {
-  width: 16px;
-  min-height: 16px;
-}
-
-.folder-picker-block {
-  display: grid;
-  gap: 8px;
-}
-
-.person-actions button {
-  flex: 1;
-  font-size: 1.15rem;
-}
-
-.plus {
-  background: rgba(51, 209, 122, 0.18);
-  color: #b9ffd6;
-}
-
-.minus {
-  background: rgba(255, 107, 107, 0.18);
-  color: #ffd7d7;
-}
-
-.person-card .mini.plus {
-  background: rgba(79, 140, 255, 0.22);
-  color: var(--text);
-}
-
-.person-card .mini.minus {
-  background: rgba(255, 107, 107, 0.18);
-  color: #ffd7d7;
-}
-
-.small-actions button {
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.history-card {
-  margin-top: 0;
-}
-
-.history-card[hidden],
-.details-card[hidden] {
-  display: none;
-}
-
-#mainView[hidden] {
-  display: none;
-}
-
-.details-card {
-  margin-top: 0;
-}
-
-.details-head h2 {
-  margin: 0;
-}
-
-.person-line-details {
-  color: rgba(169, 180, 199, 0.88);
-  font-size: 0.68rem;
-  line-height: 1.25;
-  width: 100%;
-}
-
-.person-card-detailed .person-head-row {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-}
-
-.person-card-detailed .person-line-head {
-  width: 100%;
-}
-
-.person-card-detailed .person-name {
-  font-size: 1.08rem;
-}
-
-.person-details-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-
-.person-detail-line {
-  font-size: 0.76rem;
-  line-height: 1.35;
-  color: rgba(221, 228, 240, 0.94);
-  word-break: break-word;
-  white-space: normal;
-  min-width: 0;
-}
-
-.person-detail-line[hidden] {
-  display: none;
-}
-
-.person-detail-card-details {
-  margin-top: 2px;
-}
-
-.person-copy-actions-detailed {
-  margin-top: 8px;
-}
-
-.person-copy-actions-detailed .copy-chip {
-  flex: 1 1 calc(50% - 5px);
-  min-width: 0;
-}
-
-.person-details-line {
-  flex: 1;
-  min-width: 0;
-}
-
-.person-copy-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  width: 100%;
-  margin-top: 4px;
-}
-
-.copy-chip {
-  flex: 1 1 calc(33% - 5px);
-  min-width: 4.6rem;
-  min-height: 28px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 8px;
-  background: rgba(110, 168, 254, 0.16);
-  color: #d8e7ff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1.1;
-  cursor: pointer;
-}
-
-.details-copy-all {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.details-copy-actions {
-  margin-top: 6px;
-}
-
-.operation-dialog-actions {
-  flex-wrap: wrap;
-}
-
-.operation-dialog-actions .ghost {
-  flex: 1;
-  min-width: 5rem;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.filters select,
-.filters input,
-.manual-row input,
-label select,
-label input {
-  width: 100%;
-  min-height: 46px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  outline: none;
-}
-
-.filters select,
-.filters input {
-  flex: 1;
-}
-
-.tabs {
-  overflow-x: auto;
-  padding: 12px 0;
-}
-
-.tab {
-  white-space: nowrap;
-}
-
-.tab.active {
-  background: rgba(110, 168, 254, 0.24);
-  color: #d8e7ff;
-}
-
-.amount-mode .tab {
-  flex: 1;
-}
-
-.history-list {
-  display: grid;
-  gap: 10px;
-}
-
-.history-item {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.history-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.history-amount {
-  font-weight: 900;
-}
-
-.income {
-  color: var(--green);
-}
-
-.purchase {
-  color: var(--red);
-}
-
-.transfer {
-  color: var(--yellow);
-}
-
-.history-meta {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.empty-state {
-  display: grid;
-  gap: 4px;
-  padding: 20px;
-  border: 1px dashed var(--line);
-  border-radius: 18px;
-  color: var(--muted);
-  text-align: center;
-}
-
-dialog {
-  width: min(calc(100% - 28px), 560px);
-  max-height: calc(100vh - 28px);
-  border-radius: 26px;
-  color: var(--text);
-  padding: 0;
-}
-
-dialog[open] {
-  display: block;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10000;
-  margin: 0;
-}
-
-dialog::backdrop {
-  background: rgba(3, 7, 18, 0.72);
-}
-
-.dialog-card {
-  display: grid;
-  gap: 14px;
-  padding: 18px;
-}
-
-.dialog-card h2 {
-  margin: 0;
-}
-
-label {
-  display: grid;
-  gap: 7px;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.amount-preview {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.amount-preview strong {
-  font-size: 2rem;
-}
-
-.quick-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.quick-grid button {
-  padding: 0;
-  min-height: 40px;
-  font-size: 0.82rem;
-  border-radius: 10px;
-}
-
-.manual-row input {
-  flex: 1;
-}
-
-.amount-aux-row {
-  display: flex;
-  gap: 8px;
-}
-
-.amount-aux-row button {
-  flex: 1;
-  min-height: 40px;
-  font-size: 0.78rem;
-}
-
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text);
-}
-
-.checkbox-row input {
-  width: 20px;
-  min-height: 20px;
-}
-
-.operation-dialog.is-income #transferToggleRow {
-  display: none !important;
-}
-
-.dialog-actions button {
-  flex: 1;
-}
-
-@media (max-width: 520px) {
-  .app {
-    padding-inline: 12px;
-  }
-
-  .hero,
-  .filters,
-  .history-card .section-title {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .top-bar-row {
-    gap: 6px;
-  }
-
-  .top-label {
-    font-size: 0.58rem;
-  }
-
-  .top-metric strong,
-  #familyTotal {
-    font-size: 0.82rem;
-  }
-
-  .primary.compact,
-  .ghost.compact {
-    min-height: 30px;
-    padding: 0 6px;
-    font-size: 0.58rem;
-  }
-
-  .top-bar-actions {
-    gap: 4px;
-  }
-
-  .section-actions {
-    justify-content: stretch;
-  }
-
-  .section-actions button {
-    flex: 1;
-  }
-
-  .person-card-top {
-    column-gap: 6px;
-    grid-template-columns: minmax(40%, 1fr) minmax(0, 60%);
-  }
-
-  .person-card-top .person-top-actions .mini {
-    min-height: 0;
-    height: 100%;
-    padding: 0 4px;
-    font-size: 0.6rem;
-  }
-
-  .quick-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 5px;
-  }
-
-  .quick-grid button {
-    min-height: 34px;
-    font-size: 0.68rem;
-    border-radius: 8px;
-  }
-}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#16213e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Семейный счетчик</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css?v=109">
+  </head>
+  <body>
+    <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
+      <div class="boot-error-card">
+        <strong id="bootErrorTitle">Загрузка приложения…</strong>
+        <span class="boot-error-hint">Если ошибка — текст появится ниже</span>
+        <pre id="bootErrorLog" class="boot-error-log"></pre>
+      </div>
+    </div>
+    <script>
+      (function () {
+        function bootLog(line) {
+          var log = document.getElementById("bootErrorLog");
+          var screen = document.getElementById("bootErrorScreen");
+          var title = document.getElementById("bootErrorTitle");
+          if (screen) {
+            screen.classList.add("boot-error-screen--error");
+            screen.classList.remove("boot-error-screen--loading");
+          }
+          if (title && title.textContent.indexOf("Ошибка") === -1) {
+            title.textContent = "Ошибка запуска";
+          }
+          if (log) log.textContent += line + "\n";
+        }
+        window.__bootLog = bootLog;
+        window.addEventListener("error", function (event) {
+          bootLog(event.message || "ошибка JavaScript");
+          if (event.error && event.error.stack) bootLog(event.error.stack);
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          var reason = event.reason;
+          var name = reason && reason.name ? String(reason.name) : "";
+          var msg = String(reason && reason.message ? reason.message : reason);
+          if (name === "AbortError" || /abort|aborted/i.test(msg)) return;
+          if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return;
+          bootLog(msg);
+        });
+        window.__scriptFailed = function (src) {
+          bootLog("Не загрузился файл: " + src);
+        };
+      })();
+    </script>
+    <div class="bot-pending-banner bot-notice-legacy" id="botPendingBanner" hidden aria-hidden="true"></div>
+    <div class="bot-success-banner bot-notice-legacy" id="botSuccessBanner" hidden aria-hidden="true"></div>
+    <div class="sync-alert-banner bot-notice-legacy" id="syncAlertBanner" hidden aria-hidden="true"></div>
+    <div class="app">
+      <main>
+        <section class="card top-bar">
+          <div class="top-bar-row">
+            <div class="top-metric">
+              <span class="top-label">Баланс</span>
+              <strong id="familyTotal">0</strong>
+            </div>
+            <div class="top-metric">
+              <span class="top-label">Траты</span>
+              <strong id="familyPurchaseTotal" class="purchase">0</strong>
+            </div>
+            <div class="top-metric">
+              <span class="top-label">Переводы</span>
+              <strong id="familyTransferTotal" class="transfer">0</strong>
+            </div>
+            <div class="top-bar-actions">
+              <button class="ghost compact" type="button" id="detailsToggleButton">Подробней</button>
+              <button class="ghost compact" type="button" id="historyToggleButton">История</button>
+              <button class="primary compact" type="button" id="addPersonButton">+ Карта</button>
+            </div>
+          </div>
+          <div class="sync-row">
+            <div class="sync-notice-row" id="syncNoticeRow" hidden>
+              <span id="syncNoticeText"></span>
+            </div>
+            <div class="sync-actions-row">
+              <span class="sync-status" id="syncStatus" data-status="local">Только этот телефон</span>
+              <span class="app-version" id="appVersion"></span>
+            </div>
+            <button class="ghost mini sync-code-button" type="button" id="openSyncDialogButton">Код семьи</button>
+          </div>
+        </section>
+
+        <div id="mainView">
+        <section class="card stats-card stats-card-top">
+          <div class="stats-grid">
+            <div>
+              <span class="stats-label">Пополнений</span>
+              <strong id="incomeCount">0</strong>
+            </div>
+            <div>
+              <span class="stats-label">Покупок</span>
+              <strong id="purchaseCount">0</strong>
+            </div>
+            <div>
+              <span class="stats-label">Переводов</span>
+              <strong id="transferCount">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="card folder-card">
+          <div class="banks-bar">
+            <span class="inline-label">Банки</span>
+            <div class="folder-list folder-list-flow" id="folderList" aria-label="Банки-фильтры"></div>
+            <div class="banks-controls">
+              <span class="single-filter-text">1 фильтр</span>
+              <button class="toggle-chip" type="button" id="singleFilterToggle" aria-label="Только один фильтр">🚫</button>
+              <button class="ghost mini" type="button" id="deleteFolderButton" aria-label="Удалить банк">−</button>
+              <button class="ghost mini" type="button" id="addFolderButton" aria-label="Добавить банк">+</button>
+            </div>
+          </div>
+          <div class="folder-row">
+            <span class="inline-label">Имена</span>
+            <div class="folder-list" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
+          </div>
+        </section>
+
+        <section class="people" id="peopleList" aria-label="Список людей"></section>
+        </div>
+
+        <section class="card details-card" id="detailsView" hidden>
+          <div class="section-title details-head">
+            <div>
+              <span class="label">Подробно</span>
+              <h2>Все карты</h2>
+            </div>
+          </div>
+          <section class="people" id="detailsPeopleList" aria-label="Подробный список людей"></section>
+          <div class="details-copy-all" id="detailsCopyAll">
+            <span class="inline-label">Все люди</span>
+            <div class="person-copy-actions details-copy-actions">
+              <button type="button" class="copy-chip" data-copy-all="phone">Телефон</button>
+              <button type="button" class="copy-chip" data-copy-all="card">Карта</button>
+              <button type="button" class="copy-chip" data-copy-all="phone-card">Тел+карта</button>
+              <button type="button" class="copy-chip" data-copy-all="brief">Краткие данные</button>
+              <button type="button" class="copy-chip" data-copy-all="full">Все данные</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card history-card" id="historyView" hidden>
+          <div class="section-title">
+            <div>
+              <span class="label">История</span>
+              <h2>Все операции</h2>
+            </div>
+            <button class="ghost" type="button" id="clearHistoryButton">Очистить</button>
+          </div>
+
+          <div class="filters">
+            <select id="personFilter" aria-label="Фильтр по имени"></select>
+            <select id="typeFilter" aria-label="Фильтр по разделу">
+              <option value="all">Все разделы</option>
+              <option value="income">Пополнения</option>
+              <option value="purchase">Покупки</option>
+              <option value="transfer">Переводы</option>
+            </select>
+          </div>
+          <label class="history-comment-filter">
+            <span class="label">Поиск по комментарию</span>
+            <input
+              id="commentFilter"
+              type="search"
+              aria-label="Поиск по комментарию"
+              placeholder="Например: Магазин"
+              autocomplete="off"
+            >
+          </label>
+
+          <div class="tabs" role="tablist" aria-label="Быстрый фильтр истории">
+            <button class="tab active" data-type="all">Все</button>
+            <button class="tab" data-type="income">Пополнения</button>
+            <button class="tab" data-type="purchase">Покупки</button>
+            <button class="tab" data-type="transfer">Переводы</button>
+          </div>
+
+          <div class="history-list" id="historyList"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="personDialog">
+      <form method="dialog" class="dialog-card" id="personForm">
+        <h2 id="personDialogTitle">Добавить карту</h2>
+        <label>
+          Имя
+          <input id="personFirstNameInput" autocomplete="off" maxlength="32" placeholder="Например: Саня" required>
+        </label>
+        <label>
+          Фамилия
+          <input id="personLastNameInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
+        </label>
+        <label>
+          Начальная сумма
+          <input id="personBalanceInput" inputmode="decimal" placeholder="0">
+        </label>
+        <label>
+          Телефон
+          <input id="personPhoneInput" type="tel" autocomplete="off" maxlength="24" placeholder="Необязательно">
+        </label>
+        <label>
+          Номер карты
+          <input id="personCardNumberInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
+        </label>
+        <label>
+          Данные к карте
+          <input id="personCardDetailsInput" autocomplete="off" maxlength="64" placeholder="Банк, Сбер, Озон…">
+        </label>
+        <label>
+          Комментарий
+          <input id="personProfileNoteInput" autocomplete="off" maxlength="120" placeholder="Необязательно">
+        </label>
+        <div class="folder-picker-block">
+          <span class="label">Папки</span>
+          <div class="folder-picker" id="personFolderPicker"></div>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="personUseInBotCheckbox">
+          Использовать в боте (умные переменные)
+        </label>
+        <p class="muted sync-hint person-bot-hint">Группа настраивается в админ-боте: 📱 Приложение. ID группы в приложении не нужен.</p>
+        <button class="danger" type="button" id="deletePersonButton" hidden>Удалить карту</button>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" id="cancelPersonButton">Отмена</button>
+          <button class="primary" value="default">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="folderDialog">
+      <form method="dialog" class="dialog-card" id="folderForm">
+        <h2>Добавить папку</h2>
+        <label>
+          Название папки
+          <input id="folderNameInput" autocomplete="off" maxlength="32" placeholder="Например: Мальчики ✅" required>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" id="cancelFolderButton">Отмена</button>
+          <button class="primary" value="default">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deleteFolderDialog">
+      <form method="dialog" class="dialog-card" id="deleteFolderForm">
+        <h2>Удалить папку</h2>
+        <label>
+          Какая папка
+          <select id="deleteFolderSelect" required></select>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost" value="cancel" type="button" id="cancelDeleteFolderButton">Отмена</button>
+          <button class="danger" value="default">Удалить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="operationDialog">
+      <form method="dialog" class="dialog-card operation-dialog" id="operationForm">
+        <div class="section-title">
+          <div>
+            <span class="label" id="operationPerson">Имя</span>
+            <h2 id="operationTitle">Операция</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelOperationButton">Выйти</button>
+        </div>
+
+        <div class="amount-preview">
+          <span>Выбрано</span>
+          <strong id="selectedAmount">0</strong>
+        </div>
+
+        <div class="amount-mode" aria-label="Режим выбора суммы">
+          <button class="tab active" type="button" id="addAmountModeButton">Добавлять +</button>
+          <button class="tab" type="button" id="subtractAmountModeButton">Убавлять -</button>
+        </div>
+
+        <div class="quick-grid" id="amountButtons"></div>
+
+        <div class="manual-row">
+          <input id="manualAmountInput" inputmode="decimal" placeholder="Своя сумма">
+          <button class="ghost" type="button" id="addManualAmountButton">Добавить</button>
+        </div>
+
+        <div class="amount-aux-row">
+          <button class="ghost" type="button" id="undoAmountButton">Назад</button>
+          <button class="ghost" type="button" id="clearAmountButton">Очистить</button>
+        </div>
+
+        <label class="checkbox-row" id="transferToggleRow">
+          <input type="checkbox" id="transferCheckbox">
+          Это перевод, а не покупка
+        </label>
+
+        <label>
+          Комментарий
+          <input id="noteInput" maxlength="80" placeholder="Например: продукты, школа, такси">
+        </label>
+
+        <div class="dialog-actions operation-dialog-actions">
+          <button class="ghost" type="button" id="exitOperationButton">Выйти</button>
+          <button class="danger" type="button" id="resetAmountButton">Сбросить</button>
+          <button class="primary" value="default" id="confirmOperationButton">Подтвердить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="syncDialog">
+      <form method="dialog" class="dialog-card" id="syncForm">
+        <h2>Синхронизация</h2>
+        <p class="muted sync-hint" id="syncModeHint">Синхронизация через Telegram. Телефон и сайт на ПК связаны только через канал — один код семьи и запущенный main.py на компьютере.</p>
+        <label class="telegram-sync-field">
+          Токен бота
+          <input id="telegramBotTokenInput" autocomplete="off" placeholder="123456:ABC...">
+        </label>
+        <label class="telegram-sync-field">
+          ID канала
+          <input id="telegramChatIdInput" autocomplete="off" placeholder="-1001234567890">
+        </label>
+        <label class="telegram-sync-field">
+          Секрет синхронизации
+          <input id="telegramSecretInput" autocomplete="off" placeholder="Один на всю семью">
+        </label>
+        <label class="pc-sync-field" hidden>
+          Адрес ПК (бот)
+          <input id="serverUrlInput" autocomplete="off" placeholder="http://192.168.1.100:8767">
+        </label>
+        <label>
+          Код семьи
+          <input id="familyCodeInput" autocomplete="off" maxlength="8" placeholder="Например: ABC123" required>
+        </label>
+        <p class="muted sync-hint">Группа умных переменных настраивается в админ-боте (📱 Приложение). «В боте»: человек 1 → значение 1, человек 3 → значение 3; если в боте уже есть строки 1–5, новые пойдут в 6, 7, 8…</p>
+        <button class="ghost" type="button" id="createFamilyCodeButton">Создать новый код</button>
+        <div class="sync-danger-zone">
+          <p class="muted sync-hint">Если после синхронизации возвращаются старые карты — очистите данные.</p>
+          <button class="ghost danger-text" type="button" id="clearLocalDataButton">Очистить только на телефоне</button>
+          <button class="ghost danger-text" type="button" id="clearCloudDataButton">Очистить телефон и облако Telegram</button>
+        </div>
+        <div class="dialog-actions">
+          <button class="ghost" type="button" id="cancelSyncButton">Отмена</button>
+          <button class="primary" value="default">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="botOfflineDialog">
+      <form method="dialog" class="dialog-card">
+        <h2>Синхронизация недоступна</h2>
+        <p class="dialog-hint">
+          Telegram не отвечает (блокировка API, неверный токен, бот не в канале).
+          Для пополнений и трат main.py не нужен — данные идут через sync-бот в канал.
+          Отложить запрос в бот ПК?
+        </p>
+        <div class="dialog-actions">
+          <button type="submit" class="ghost" value="cancel">Отменить</button>
+          <button type="submit" class="primary" value="confirm">Да</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <strong>Пока пусто</strong>
+        <span>Добавьте карту и начните вести пополнения или траты.</span>
+      </div>
+    </template>
+
+    <button class="icon-button" id="installButton" hidden>Установить</button>
+    <script src="server-config.js?v=109" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=109" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="telegram-crypto.js?v=109" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=109" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=109" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=109" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="app.js?v=109" defer onerror="window.__scriptFailed('app.js')"></script>
+  </body>
+</html>
