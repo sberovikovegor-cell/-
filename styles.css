@@ -729,12 +729,64 @@ dialog {
   width: 100%;
 }
 
-.person-top-actions {
+.person-card-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(100%, 23rem));
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.person-card-top .person-line-head {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.person-card-top .person-line-balance {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.person-card-top .person-top-actions {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+}
+
+.person-card-top .person-top-actions .mini {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 52px;
+  padding: 0 6px;
+  font-size: 0.64rem;
+  line-height: 1.1;
+  text-align: center;
+}
+
+/* fallback без person-card-top (не используется на главном экране) */
+.person-top-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
   flex-shrink: 0;
   width: auto;
-  max-width: 42%;
+  max-width: min(100%, 23rem);
+  min-width: 0;
 }
 
 .person-line {
@@ -808,11 +860,11 @@ dialog {
 }
 
 .person-top-actions .mini {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  min-width: 8.75rem;
   min-height: 26px;
   height: 26px;
-  padding: 0 4px;
+  padding: 0 6px;
   font-size: 0.64rem;
   line-height: 1;
   text-align: center;
@@ -1282,18 +1334,16 @@ label {
     flex: 1;
   }
 
-  .person-head-row {
-    gap: 28px;
+  .person-card-top {
+    column-gap: 6px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, min(100%, 23rem));
   }
 
-  .person-top-actions {
-    width: 8.4rem;
-  }
-
-  .person-top-actions .mini {
-    min-height: 24px;
-    height: 24px;
-    padding: 0 3px;
+  .person-card-top .person-top-actions .mini {
+    min-width: 0;
+    min-height: 48px;
+    height: 100%;
+    padding: 0 5px;
     font-size: 0.6rem;
   }
 
