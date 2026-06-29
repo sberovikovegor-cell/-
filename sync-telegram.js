@@ -416,7 +416,11 @@
       && !rejectStaleWipe;
 
     if (shouldApplyState) {
-      onRemoteUpdate(payload.state, remoteVersion);
+      const lastAppliedPull = Number(localStorage.getItem("family-counter-applied-remote-pull") || 0);
+      if (remoteVersion > lastAppliedPull) {
+        onRemoteUpdate(payload.state, remoteVersion);
+        localStorage.setItem("family-counter-applied-remote-pull", String(remoteVersion));
+      }
     }
     let stateApplied = Boolean(shouldApplyState);
     if (remoteVersion >= localVersion && !rejectStaleWipe) {
@@ -522,11 +526,18 @@
                 stateToPush = { ...stateToPush, dataEpoch: epoch };
               }
             }
+            if (typeof window.enforceLocalPeopleOrderOnPush === "function") {
+              stateToPush = window.enforceLocalPeopleOrderOnPush(localState, stateToPush);
+            }
           }
         }
       } catch (error) {
         console.warn("merge before push", error);
       }
+    }
+
+    if (stateToPush && typeof window.enforceLocalPeopleOrderOnPush === "function") {
+      stateToPush = window.enforceLocalPeopleOrderOnPush(localState, stateToPush);
     }
 
     if (stateToPush && typeof window.sanitizeStateForCloud === "function") {
