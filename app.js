@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "83";
+const APP_BUILD = "85";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -1694,12 +1694,32 @@ function renderDetailsPeople() {
 
 function buildPersonCard(person, stats, detailed) {
   const card = document.createElement("article");
-  card.className = "person-card";
+  card.className = detailed ? "person-card person-card-detailed" : "person-card";
   card.dataset.personId = person.id;
-  const detailsLine = detailed
+  const topActionsHtml = detailed
+    ? ""
+    : `
+      <div class="person-top-actions">
+        <button class="mini minus" type="button" data-action="expense">Трата</button>
+        <button class="mini plus" type="button" data-action="income">Пополнить</button>
+      </div>`;
+  const detailsBlock = detailed
     ? `
-    <div class="person-line person-line-details"><span class="person-details-line"></span></div>
-    <div class="person-copy-actions">
+    <div class="person-details-block">
+      <div class="person-detail-row">
+        <span class="person-detail-label">Телефон</span>
+        <span class="person-detail-value person-detail-phone"></span>
+      </div>
+      <div class="person-detail-row">
+        <span class="person-detail-label">Карта</span>
+        <span class="person-detail-value person-detail-card"></span>
+      </div>
+      <div class="person-detail-row person-detail-comment-row">
+        <span class="person-detail-label">Коммент</span>
+        <span class="person-detail-value person-detail-comment"></span>
+      </div>
+    </div>
+    <div class="person-copy-actions person-copy-actions-detailed">
       <button type="button" class="copy-chip" data-copy="phone">Телефон</button>
       <button type="button" class="copy-chip" data-copy="card">Карта</button>
       <button type="button" class="copy-chip" data-copy="phone-card">Тел+карта</button>
@@ -1710,24 +1730,25 @@ function buildPersonCard(person, stats, detailed) {
   card.innerHTML = `
     <div class="person-head-row">
       <div class="person-line person-line-head">
-        <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
         <span class="person-name"></span>
         <button class="edit-link" type="button" data-action="edit">Изм.</button>
       </div>
-      <div class="person-top-actions">
-        <button class="mini minus" type="button" data-action="expense">Трата</button>
-        <button class="mini plus" type="button" data-action="income">Пополнить</button>
+      ${topActionsHtml}
+    </div>
+    <div class="person-money-row">
+      <div class="person-money-col">
+        <div class="person-line person-line-balance">
+          <span class="person-balance"></span>
+          <span class="row-sep">·</span>
+          <span class="last-income"></span>
+        </div>
+        <div class="person-line person-line-stats">
+          <span class="person-stats-line"></span>
+        </div>
       </div>
+      <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
     </div>
-    <div class="person-line person-line-balance">
-      <span class="person-balance"></span>
-      <span class="row-sep">·</span>
-      <span class="last-income"></span>
-    </div>
-    <div class="person-line person-line-stats">
-      <span class="person-stats-line"></span>
-    </div>
-    ${detailsLine}
+    ${detailsBlock}
   `;
   card.querySelector(".person-name").textContent = person.name;
   const botToggle = card.querySelector(".bot-toggle");
@@ -1736,7 +1757,7 @@ function buildPersonCard(person, stats, detailed) {
   card.querySelector(".last-income").textContent = formatMoney(stats.lastIncomeAmount);
   card.querySelector(".person-stats-line").textContent = formatPersonPurchaseStats(stats);
   if (detailed) {
-    card.querySelector(".person-details-line").textContent = formatPersonDetailsLine(person);
+    fillPersonDetailsBlock(card, person);
   }
   return card;
 }
@@ -1771,6 +1792,31 @@ function renderPeopleList(container, detailed) {
   });
 
   container.append(fragment);
+}
+
+function formatPersonCardDisplay(person) {
+  const parts = [];
+  if (person.cardNumber) parts.push(person.cardNumber);
+  if (person.cardDetails) parts.push(person.cardDetails);
+  return parts.join(" ") || "—";
+}
+
+function fillPersonDetailsBlock(card, person) {
+  const phoneEl = card.querySelector(".person-detail-phone");
+  const cardEl = card.querySelector(".person-detail-card");
+  const commentEl = card.querySelector(".person-detail-comment");
+  const commentRow = card.querySelector(".person-detail-comment-row");
+  if (!phoneEl || !cardEl || !commentEl || !commentRow) return;
+  phoneEl.textContent = person.phone || "—";
+  cardEl.textContent = formatPersonCardDisplay(person);
+  const comment = String(person.profileNote || "").trim();
+  if (comment) {
+    commentEl.textContent = comment;
+    commentRow.hidden = false;
+  } else {
+    commentEl.textContent = "";
+    commentRow.hidden = true;
+  }
 }
 
 function formatPersonDetailsLine(person) {
