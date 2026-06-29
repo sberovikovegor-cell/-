@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "155";
+const APP_BUILD = "161";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -45,7 +45,7 @@ const PERSON_BANK_THEMES = [
   { id: "psb", label: "ПСБ", short: "ПС" },
 ];
 const PERSON_BANK_THEME_IDS = new Set(PERSON_BANK_THEMES.map((item) => item.id));
-const PERSON_DRAG_LONG_PRESS_MS = 450;
+const PERSON_DRAG_LONG_PRESS_MS = 2000;
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -346,7 +346,7 @@ function init() {
     if (hasBotPendingSync()) {
       scheduleBotExportWorker();
     }
-    render();
+    render(true);
     registerServiceWorker();
     hideBootScreen();
   } catch (error) {
@@ -676,6 +676,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = scrubFiltersToPeople(state);
   state = applyDeletedFolderFilter(state);
   state = finalizePeopleAfterMerge(localBefore, normalizedRemote, state);
+  syncBalancesFromHistory();
   state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
@@ -1913,7 +1914,13 @@ function applySyncMetaFromRemote(remoteState) {
   renderSyncAlertBanner();
 }
 
+function syncBalancesFromHistory() {
+  if (!window.FamilyMerge?.replayBalancesFromHistory) return;
+  state.people = FamilyMerge.replayBalancesFromHistory(state.people, state.history || []);
+}
+
 function saveState(options = {}) {
+  syncBalancesFromHistory();
   state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
@@ -1986,7 +1993,31 @@ function renderHistoryPeriodSelect() {
   }
 }
 
-function render() {
+function stateRenderFingerprint(appState = state) {
+  if (!appState) return "";
+  const people = (appState.people || [])
+    .map((p) => `${p.id}:${Number(p.balance || 0)}:${p.cardTint || ""}`)
+    .join("|");
+  const historySig = (appState.history || [])
+    .map((h) => `${h.id}:${h.type}:${h.amount}:${h.note || ""}:${Number(h.balanceAfter || 0)}`)
+    .join("|");
+  return JSON.stringify({
+    people,
+    historySig,
+    folders: (appState.folders || []).map((f) => `${f.id}:${f.name}`).join(","),
+    activeFolderIds: (appState.activeFolderIds || []).join(","),
+    activeFirstNames: (appState.activeFirstNames || []).join(","),
+    view: activeView,
+    period: activeHistoryPeriod,
+  });
+}
+
+let lastRenderFingerprint = "";
+
+function render(force = false) {
+  const fp = stateRenderFingerprint();
+  if (!force && fp === lastRenderFingerprint) return;
+  lastRenderFingerprint = fp;
   renderSyncNoticeRow();
   renderHistoryPeriodSelect();
   renderTotal();
@@ -2221,10 +2252,10 @@ function resetPersonDragSession(container) {
   if (!personDragSession) return;
   if (personDragSession.timer) clearTimeout(personDragSession.timer);
   if (personDragSession.card) {
-    personDragSession.card.classList.remove("is-dragging", "is-drag-armed");
+    personDragSession.card.classList.remove("is-drag-ready", "is-drag-pending");
   }
   const list = container || elements.peopleList;
-  if (list) list.classList.remove("is-reorder-active", "is-reorder-armed");
+  if (list) list.classList.remove("is-reorder-active");
   document.body.classList.remove("person-reorder-lock");
   stopPersonDragDocumentListeners();
   personDragSession = null;
@@ -2287,7 +2318,8 @@ function bindPeopleDragReorder() {
   function onLongPressReady() {
     if (!personDragSession || personDragSession.dragging) return;
     personDragSession.dragging = true;
-    personDragSession.card.classList.add("is-dragging");
+    personDragSession.card.classList.remove("is-drag-pending");
+    personDragSession.card.classList.add("is-drag-ready");
     container.classList.add("is-reorder-active");
     try {
       personDragSession.card.setPointerCapture(personDragSession.pointerId);
@@ -2318,10 +2350,9 @@ function bindPeopleDragReorder() {
     event.preventDefault();
     resetPersonDragSession(container);
     startPersonDragDocumentListeners();
-    card.classList.add("is-drag-armed");
-    container.classList.add("is-reorder-armed");
+    card.classList.add("is-drag-pending");
     document.body.classList.add("person-reorder-lock");
-    const longPressMs = event.pointerType === "mouse" ? 280 : PERSON_DRAG_LONG_PRESS_MS;
+    const longPressMs = PERSON_DRAG_LONG_PRESS_MS;
     personDragSession = {
       personId: card.dataset.personId,
       card,
@@ -4383,35 +4414,10 @@ function registerServiceWorker() {
   // В APK (file://) service worker не работает и может ломать WebView
   if (window.location.protocol === "file:") return;
 
-  let reloading = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloading) return;
-    reloading = true;
-    window.location.reload();
-  });
-
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(`sw.js?v=${APP_BUILD}`)
-      .then((registration) => {
-        registration.addEventListener("updatefound", () => {
-          const worker = registration.installing;
-          if (!worker) return;
-          worker.addEventListener("statechange", () => {
-            if (worker.state === "installed" && navigator.serviceWorker.controller) {
-              worker.postMessage({ type: "SKIP_WAITING" });
-            }
-          });
-        });
-
-        if (registration.waiting && navigator.serviceWorker.controller) {
-          registration.waiting.postMessage({ type: "SKIP_WAITING" });
-        }
-
-        setInterval(() => registration.update().catch(() => {}), 60 * 60 * 1000);
-      })
-      .catch(() => {
-        // Приложение продолжит работать без офлайн-кэша.
-      });
+    navigator.serviceWorker.register(`sw.js?v=${APP_BUILD}`).catch(() => {
+      // Приложение продолжит работать без офлайн-кэша.
+    });
   });
 }
 
