@@ -226,7 +226,6 @@
 
     return (people || []).map((person) => {
       const pickedBalance = Number(person.balance || 0);
-      const balanceAt = fieldTime(person, "balance");
       const lastHistAt = lastHistoryTimeForPerson(person.id, sorted);
       const personHistory = sorted.filter((h) => h.personId === person.id);
       if (personHistory.length === 0) {
@@ -241,7 +240,8 @@
       });
       replayedBalance = Math.round(replayedBalance * 100) / 100;
 
-      if (balanceAt > lastHistAt && pickedBalance !== replayedBalance) {
+      const manualAt = Number(person.balanceManualAt || 0);
+      if (manualAt > lastHistAt && pickedBalance !== replayedBalance) {
         return { ...person, balance: pickedBalance };
       }
       return { ...person, balance: replayedBalance };
