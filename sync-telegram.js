@@ -415,14 +415,27 @@
       && !staleWhileBotPending
       && !rejectStaleWipe;
 
+    let stateApplied = false;
     if (shouldApplyState) {
       const lastAppliedPull = Number(localStorage.getItem("family-counter-applied-remote-pull") || 0);
-      if (remoteVersion > lastAppliedPull) {
+      const localEmpty = typeof window.hasLocalAppData === "function"
+        ? !window.hasLocalAppData(localAppState)
+        : !localAppState;
+      const remoteHasData = typeof window.hasRemoteAppData === "function"
+        ? window.hasRemoteAppData(payload.state)
+        : Boolean(payload.state?.people?.length || payload.state?.history?.length);
+      const needsInitialImport = localEmpty && remoteHasData;
+      const shouldApplyRemote = needsInitialImport || remoteVersion > lastAppliedPull;
+      if (shouldApplyRemote) {
         onRemoteUpdate(payload.state, remoteVersion);
-        localStorage.setItem("family-counter-applied-remote-pull", String(remoteVersion));
+        if (remoteVersion > 0) {
+          localStorage.setItem("family-counter-applied-remote-pull", String(remoteVersion));
+        }
       }
+      stateApplied = Boolean(needsInitialImport || (remoteVersion > lastAppliedPull));
+    } else {
+      stateApplied = false;
     }
-    let stateApplied = Boolean(shouldApplyState);
     if (remoteVersion >= localVersion && !rejectStaleWipe) {
       localStorage.setItem(LOCAL_VERSION_KEY, String(remoteVersion));
     } else if (
