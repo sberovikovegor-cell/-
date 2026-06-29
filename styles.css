@@ -731,7 +731,7 @@ dialog {
 
 .person-card-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, min(100%, 23rem));
+  grid-template-columns: minmax(42%, 1fr) minmax(0, 58%);
   grid-template-rows: auto auto;
   column-gap: 8px;
   row-gap: 2px;
@@ -743,12 +743,14 @@ dialog {
   grid-column: 1;
   grid-row: 1;
   min-width: 0;
+  align-items: flex-start;
 }
 
 .person-card-top .person-line-balance {
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .person-card-top .person-top-actions {
@@ -760,8 +762,7 @@ dialog {
   align-self: stretch;
   width: 100%;
   min-width: 0;
-  max-width: none;
-  height: 100%;
+  max-width: 100%;
 }
 
 .person-card-top .person-top-actions .mini {
@@ -771,7 +772,7 @@ dialog {
   width: 100%;
   min-width: 0;
   height: 100%;
-  min-height: 52px;
+  min-height: 0;
   padding: 0 6px;
   font-size: 0.64rem;
   line-height: 1.1;
@@ -1336,14 +1337,13 @@ label {
 
   .person-card-top {
     column-gap: 6px;
-    grid-template-columns: minmax(0, 1fr) minmax(0, min(100%, 23rem));
+    grid-template-columns: minmax(40%, 1fr) minmax(0, 60%);
   }
 
   .person-card-top .person-top-actions .mini {
-    min-width: 0;
-    min-height: 48px;
+    min-height: 0;
     height: 100%;
-    padding: 0 5px;
+    padding: 0 4px;
     font-size: 0.6rem;
   }
 
