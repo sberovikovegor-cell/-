@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="styles.css?v=89">
+    <link rel="stylesheet" href="styles.css?v=97">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -40,7 +40,12 @@
           if (event.error && event.error.stack) bootLog(event.error.stack);
         });
         window.addEventListener("unhandledrejection", function (event) {
-          bootLog(String(event.reason && event.reason.message ? event.reason.message : event.reason));
+          var reason = event.reason;
+          var name = reason && reason.name ? String(reason.name) : "";
+          var msg = String(reason && reason.message ? reason.message : reason);
+          if (name === "AbortError" || /abort|aborted/i.test(msg)) return;
+          if (/failed to fetch|networkerror|network request failed|load failed/i.test(msg)) return;
+          bootLog(msg);
         });
         window.__scriptFailed = function (src) {
           bootLog("Не загрузился файл: " + src);
@@ -370,12 +375,12 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=89" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=89" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="telegram-crypto.js?v=89" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=89" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=89" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=89" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="app.js?v=89" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=97" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=97" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="telegram-crypto.js?v=97" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=97" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=97" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=97" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="app.js?v=97" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
