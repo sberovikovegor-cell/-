@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "111";
+const APP_BUILD = "112";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -315,8 +315,6 @@ const elements = {
   syncNoticeRow: document.querySelector("#syncNoticeRow"),
   syncNoticeText: document.querySelector("#syncNoticeText"),
 };
-
-init();
 
 function init() {
   try {
@@ -3688,3 +3686,5 @@ function registerServiceWorker() {
       });
   });
 }
+
+init();
