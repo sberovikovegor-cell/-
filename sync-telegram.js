@@ -276,6 +276,21 @@
     return `https://api.telegram.org/bot${token}/${method}`;
   }
 
+  function isTelegramNetworkError(error) {
+    const name = String(error?.name || "");
+    const msg = String(error?.message || "");
+    return (
+      name === "AbortError"
+      || /abort|aborted/i.test(msg)
+      || /failed to fetch|networkerror|network request failed|load failed/i.test(msg)
+    );
+  }
+
+  function toTelegramNetworkError(error, fallback = "Нет связи с Telegram (таймаут или блокировка API)") {
+    if (isTelegramNetworkError(error)) return new Error(fallback);
+    return error;
+  }
+
   async function tgPostJson(method, params = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
@@ -290,11 +305,7 @@
       if (!data.ok) throw new Error(data.description || `Telegram ${method}`);
       return data.result;
     } catch (error) {
-      const msg = error?.message || "ошибка";
-      if (msg.includes("abort") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        throw new Error("Нет связи с Telegram (сеть или блокировка API)");
-      }
-      throw error;
+      throw toTelegramNetworkError(error);
     } finally {
       clearTimeout(timer);
     }
@@ -310,13 +321,10 @@
       return data.result;
     } catch (error) {
       console.warn("tg get", method, error);
-      const msg = error?.message || "ошибка";
-      if (msg.includes("abort") || msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        updateSyncStatus("offline", "Нет связи с Telegram");
-      } else {
-        updateSyncStatus("offline", `Telegram: ${msg}`);
-      }
-      throw error;
+      const normalized = toTelegramNetworkError(error);
+      const msg = normalized?.message || "ошибка";
+      updateSyncStatus("offline", msg.startsWith("Нет связи") ? msg : `Telegram: ${msg}`);
+      throw normalized;
     } finally {
       clearTimeout(timer);
     }
@@ -352,10 +360,16 @@
     const fileUrl = tgFileUrl(fileMeta.file_path);
     const fileController = new AbortController();
     const fileTimer = setTimeout(() => fileController.abort(), 12000);
-    const bin = await fetch(fileUrl, { signal: fileController.signal });
-    clearTimeout(fileTimer);
-    if (!bin.ok) throw new Error("download failed");
-    const bytes = new Uint8Array(await bin.arrayBuffer());
+    let bytes;
+    try {
+      const bin = await fetch(fileUrl, { signal: fileController.signal });
+      if (!bin.ok) throw new Error("download failed");
+      bytes = new Uint8Array(await bin.arrayBuffer());
+    } catch (error) {
+      throw toTelegramNetworkError(error, "Нет связи с Telegram (таймаут загрузки файла)");
+    } finally {
+      clearTimeout(fileTimer);
+    }
     const payload = await window.FamilyTelegramCrypto.decryptJson(code, secret, bytes);
     return { payload, remoteVersion };
   }
@@ -628,17 +642,21 @@
     });
 
     const runInitialPull = () => {
-      pullFromTelegram().finally(() => {
-        const pendingRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
-        if (pendingRev > 0) {
-          startPendingBotPoll();
-        }
-        if (isNetworkAvailable()) {
-          safeSyncedStatus("Синхронизировано");
-        } else {
-          updateSyncStatus("offline", "Офлайн");
-        }
-      });
+      pullFromTelegram()
+        .catch((error) => {
+          console.warn("initial tg pull", error);
+        })
+        .finally(() => {
+          const pendingRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
+          if (pendingRev > 0) {
+            startPendingBotPoll();
+          }
+          if (isNetworkAvailable()) {
+            safeSyncedStatus("Синхронизировано");
+          } else {
+            updateSyncStatus("offline", "Офлайн");
+          }
+        });
     };
 
     const delayMs = Number(options.delayInitialPullMs || 0);
