@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=113">
+    <link rel="stylesheet" href="./styles.css?v=115">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -159,7 +159,13 @@
               <span class="label">История</span>
               <h2>Все операции</h2>
             </div>
-            <button class="ghost" type="button" id="clearHistoryButton">Очистить</button>
+            <div class="history-actions">
+              <select id="historyPeriodSelect" class="history-period-select" aria-label="Период истории">
+                <option value="current">Текущий период</option>
+              </select>
+              <button class="ghost" type="button" id="nextMonthButton">След. месяц</button>
+              <button class="ghost" type="button" id="clearHistoryButton">Очистить</button>
+            </div>
           </div>
 
           <div class="filters">
@@ -381,12 +387,12 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=113" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=113" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="telegram-crypto.js?v=113" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=113" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=113" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=113" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="app.js?v=113" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=115" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=115" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="telegram-crypto.js?v=115" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=115" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=115" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=115" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="app.js?v=115" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
