@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "85";
+const APP_BUILD = "87";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -1706,18 +1706,10 @@ function buildPersonCard(person, stats, detailed) {
   const detailsBlock = detailed
     ? `
     <div class="person-details-block">
-      <div class="person-detail-row">
-        <span class="person-detail-label">Телефон</span>
-        <span class="person-detail-value person-detail-phone"></span>
-      </div>
-      <div class="person-detail-row">
-        <span class="person-detail-label">Карта</span>
-        <span class="person-detail-value person-detail-card"></span>
-      </div>
-      <div class="person-detail-row person-detail-comment-row">
-        <span class="person-detail-label">Коммент</span>
-        <span class="person-detail-value person-detail-comment"></span>
-      </div>
+      <div class="person-detail-line person-detail-phone"></div>
+      <div class="person-detail-line person-detail-card-number"></div>
+      <div class="person-detail-line person-detail-card-details"></div>
+      <div class="person-detail-line person-detail-comment person-detail-comment-row"></div>
     </div>
     <div class="person-copy-actions person-copy-actions-detailed">
       <button type="button" class="copy-chip" data-copy="phone">Телефон</button>
@@ -1794,29 +1786,23 @@ function renderPeopleList(container, detailed) {
   container.append(fragment);
 }
 
-function formatPersonCardDisplay(person) {
-  const parts = [];
-  if (person.cardNumber) parts.push(person.cardNumber);
-  if (person.cardDetails) parts.push(person.cardDetails);
-  return parts.join(" ") || "—";
+function setPersonDetailLine(element, value) {
+  if (!element) return;
+  const text = String(value ?? "").trim();
+  if (text) {
+    element.textContent = text;
+    element.hidden = false;
+  } else {
+    element.textContent = "";
+    element.hidden = true;
+  }
 }
 
 function fillPersonDetailsBlock(card, person) {
-  const phoneEl = card.querySelector(".person-detail-phone");
-  const cardEl = card.querySelector(".person-detail-card");
-  const commentEl = card.querySelector(".person-detail-comment");
-  const commentRow = card.querySelector(".person-detail-comment-row");
-  if (!phoneEl || !cardEl || !commentEl || !commentRow) return;
-  phoneEl.textContent = person.phone || "—";
-  cardEl.textContent = formatPersonCardDisplay(person);
-  const comment = String(person.profileNote || "").trim();
-  if (comment) {
-    commentEl.textContent = comment;
-    commentRow.hidden = false;
-  } else {
-    commentEl.textContent = "";
-    commentRow.hidden = true;
-  }
+  setPersonDetailLine(card.querySelector(".person-detail-phone"), person.phone);
+  setPersonDetailLine(card.querySelector(".person-detail-card-number"), person.cardNumber);
+  setPersonDetailLine(card.querySelector(".person-detail-card-details"), person.cardDetails);
+  setPersonDetailLine(card.querySelector(".person-detail-comment"), person.profileNote);
 }
 
 function formatPersonDetailsLine(person) {
@@ -2252,10 +2238,6 @@ function handleDetailsCopyAllClick(event) {
 function buildAllPeopleCopyText(mode) {
   const people = getVisiblePeople();
   if (people.length === 0) return "";
-
-  if (mode === "phone") {
-    return people.map((person) => person.phone).filter(Boolean).join("\n");
-  }
 
   const blocks = people.map((person) => {
     const stats = getPersonStats(person.id);
@@ -3316,31 +3298,38 @@ function formatLastIncomeStatsLine(stats) {
   return `Пополнение ${formatMoneyRub(stats.lastIncomeAmount)} · ${formatDate(stats.lastIncomeAt)} · ${formatPurchaseCount(stats.purchasesCount)} · ${formatMoneyRub(stats.purchasesTotal)}`;
 }
 
+function copyBlockWithName(person, lines) {
+  const name = String(person?.name || "").trim() || "—";
+  const data = (lines || []).map((line) => String(line ?? "").trim()).filter(Boolean);
+  if (!data.length) return name;
+  return [name, ...data].join("\n");
+}
+
 function buildPersonCopyText(mode, person, stats) {
   switch (mode) {
     case "phone":
-      return person.phone || "";
-    case "card":
+      return copyBlockWithName(person, [person.phone]);
+    case "card": {
       const cardParts = [];
       if (person.cardNumber) cardParts.push(person.cardNumber);
       if (person.cardDetails) cardParts.push(person.cardDetails);
-      return cardParts.join("\n");
+      return copyBlockWithName(person, cardParts);
+    }
     case "phone-card":
-      return [
-        person.name,
+      return copyBlockWithName(person, [
         person.phone || "—",
         formatPersonCardLine(person),
-      ].join("\n");
+      ]);
     case "brief":
-      return [
-        `${person.name} ${formatMoney(person.balance)}`,
+      return copyBlockWithName(person, [
+        formatMoney(person.balance),
         person.phone || "—",
         formatPersonCardLine(person),
         formatLastIncomeStatsLine(stats),
-      ].join("\n");
+      ]);
     case "full":
-      return [
-        `${person.name} ${formatMoney(person.balance)}`,
+      return copyBlockWithName(person, [
+        formatMoney(person.balance),
         person.phone || "—",
         formatPersonCardLine(person),
         formatLastIncomeStatsLine(stats),
@@ -3348,7 +3337,7 @@ function buildPersonCopyText(mode, person, stats) {
         `Пополнений за 7 дней: ${stats.incomesLast7Days}`,
         `Покупки за 3 дня: ${formatPurchaseCount(stats.purchasesLast3DaysCount)} · ${formatMoneyRub(stats.purchasesLast3DaysTotal)}`,
         `Покупки за 7 дней: ${formatPurchaseCount(stats.purchasesLast7DaysCount)} · ${formatMoneyRub(stats.purchasesLast7DaysTotal)}`,
-      ].join("\n");
+      ]);
     default:
       return "";
   }
