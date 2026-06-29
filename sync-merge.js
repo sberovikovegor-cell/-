@@ -12,7 +12,6 @@
     "cardDetails",
     "profileNote",
     "folderIds",
-    "balance",
     "useInBot",
     "botSlotIndex",
   ];
@@ -124,6 +123,25 @@
         merged[field] = pickField(localPerson, remotePerson, field);
       });
       merged.fieldUpdatedAt = mergeFieldUpdatedAt(localPerson, remotePerson);
+
+      const localManualAt = Number(localPerson.balanceManualAt || 0);
+      const remoteManualAt = Number(remotePerson.balanceManualAt || 0);
+      if (remoteManualAt > localManualAt) {
+        merged.balance = Number(remotePerson.balance || 0);
+        merged.balanceManualAt = remoteManualAt;
+      } else if (localManualAt > remoteManualAt) {
+        merged.balance = Number(localPerson.balance || 0);
+        merged.balanceManualAt = localManualAt;
+      } else if (localManualAt > 0 && remoteManualAt > 0) {
+        const balanceTime = fieldTime(localPerson, "balance");
+        const remoteBalanceTime = fieldTime(remotePerson, "balance");
+        merged.balance = remoteBalanceTime > balanceTime
+          ? Number(remotePerson.balance || 0)
+          : Number(localPerson.balance || 0);
+        merged.balanceManualAt = localManualAt;
+      } else {
+        delete merged.balanceManualAt;
+      }
       const pickedUseInBot = Boolean(pickField(localPerson, remotePerson, "useInBot"));
       merged.useInBot = pickedUseInBot;
       merged.botSlotIndex = pickField(localPerson, remotePerson, "botSlotIndex");
@@ -202,11 +220,21 @@
   }
 
   function historyDelta(entry) {
+    if (entry?.type === "balance_set") return 0;
     const amount = Number(entry.amount || 0);
     if (entry.direction === "plus") return amount;
     if (entry.direction === "minus") return -amount;
     if (entry.type === "income") return amount;
     return -amount;
+  }
+
+  function collectAllHistory(appState) {
+    const clearedAtMs = Number(appState?.historyClearedAtMs || 0);
+    const fromMonths = [];
+    (appState?.historyMonths || []).forEach((month) => {
+      (month?.history || []).forEach((entry) => fromMonths.push(entry));
+    });
+    return mergeHistory(fromMonths, appState?.history || [], clearedAtMs);
   }
 
   function lastHistoryTimeForPerson(personId, history) {
@@ -234,14 +262,21 @@
 
       const first = personHistory[0];
       const firstDelta = historyDelta(first);
-      let replayedBalance = Number(first.balanceAfter || 0) - firstDelta;
+      let replayedBalance = first.type === "balance_set"
+        ? Number(first.balanceAfter || 0)
+        : Number(first.balanceAfter || 0) - firstDelta;
       personHistory.forEach((entry) => {
+        if (entry.type === "balance_set") {
+          replayedBalance = Number(entry.balanceAfter || replayedBalance);
+          return;
+        }
+        if (entry === first && first.type === "balance_set") return;
         replayedBalance += historyDelta(entry);
       });
       replayedBalance = Math.round(replayedBalance * 100) / 100;
 
       const manualAt = Number(person.balanceManualAt || 0);
-      if (manualAt > lastHistAt && pickedBalance !== replayedBalance) {
+      if (manualAt > 0 && manualAt >= lastHistAt) {
         return { ...person, balance: pickedBalance };
       }
       return { ...person, balance: replayedBalance };
@@ -328,6 +363,11 @@
       remoteState?.history,
       historyClearedAtMs,
     );
+    const fullHistory = collectAllHistory({
+      history,
+      historyMonths,
+      historyClearedAtMs,
+    });
     let people = dedupePeopleById(mergePeople(localState?.people, remoteState?.people));
     const localUi = Number(localState?.uiUpdatedAt || 0);
     const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
@@ -341,7 +381,7 @@
         ? person.folderIds.filter((id) => folderIds.has(id))
         : [],
     }));
-    people = replayBalancesFromHistory(people, history);
+    people = replayBalancesFromHistory(people, fullHistory);
 
     const peopleFirstNames = new Set(
       people.map(
@@ -411,6 +451,7 @@
     orderPeopleLike,
     mergeFolders,
     replayBalancesFromHistory,
+    collectAllHistory,
     PROFILE_FIELDS,
   };
 })();
