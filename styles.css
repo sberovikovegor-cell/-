@@ -324,14 +324,19 @@ dialog {
 }
 
 .banks-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 5px 6px;
+  align-items: start;
 }
 
 .folder-list-flow {
-  display: contents;
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
 }
 
 .banks-controls {
@@ -339,7 +344,9 @@ dialog {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  margin-left: auto;
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
 }
 
 .banks-controls .mini {
@@ -357,6 +364,12 @@ dialog {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   line-height: 1;
+}
+
+.banks-bar > .inline-label {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
 }
 
 .folder-row {
