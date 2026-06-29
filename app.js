@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "163";
+const APP_BUILD = "164";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -2066,7 +2066,7 @@ function renderHistoryPeriodSelect() {
 function stateRenderFingerprint(appState = state) {
   if (!appState) return "";
   const people = (appState.people || [])
-    .map((p) => `${p.id}:${Number(p.balance || 0)}:${p.cardTint || ""}`)
+    .map((p) => `${p.id}:${Number(p.balance || 0)}:${p.cardTint || ""}:${Boolean(p.useInBot)}:${Boolean(p.botPendingSync)}:${p.botPendingAction || ""}:${p.botConfirmedInBot}:${p.botSlotIndex ?? ""}`)
     .join("|");
   const historySig = (appState.history || [])
     .map((h) => `${h.id}:${h.type}:${h.amount}:${h.note || ""}:${Number(h.balanceAfter || 0)}`)
@@ -2424,7 +2424,10 @@ function bindPeopleDragReorder() {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const card = event.target.closest(".person-card");
     if (!card || !container.contains(card)) return;
-    if (event.target.closest("button, a, input, select, textarea, label")) return;
+    if (event.target.closest("button, a, input, select, textarea, label")) {
+      resetPersonDragSession(container);
+      return;
+    }
 
     resetPersonDragSession(container);
     startPersonDragDocumentListeners();
@@ -3115,7 +3118,7 @@ function openPersonDialog(person = null) {
   elements.personCardDetailsInput.value = formatCardDetailsForInput(person?.cardDetails ?? "");
   elements.personProfileNoteInput.value = person?.profileNote ?? "";
   if (elements.personUseInBotCheckbox) {
-    elements.personUseInBotCheckbox.checked = Boolean(person?.useInBot);
+    elements.personUseInBotCheckbox.checked = person ? getBotDisplayInBot(person) : false;
   }
   elements.deletePersonButton.hidden = !person;
   renderCardTintPicker(person?.cardTint ?? "");
@@ -3806,8 +3809,22 @@ function confirmOfflineBotSync() {
   });
 }
 
+function refreshPersonBotToggles() {
+  const updateList = (container) => {
+    if (!container) return;
+    container.querySelectorAll(".person-card").forEach((card) => {
+      const person = state.people.find((item) => item.id === card.dataset.personId);
+      if (!person) return;
+      renderBotToggleButton(card.querySelector(".bot-toggle"), person);
+    });
+  };
+  updateList(elements.peopleList);
+  updateList(elements.detailsPeopleList);
+}
+
 function renderBotPendingBanner() {
   renderSyncNoticeRow();
+  refreshPersonBotToggles();
 }
 
 function cancelBotPendingForPerson(personId) {
