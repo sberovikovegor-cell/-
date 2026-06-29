@@ -563,8 +563,11 @@ dialog {
 
 .bot-toggle {
   flex-shrink: 0;
+  width: var(--person-bot-col, 4.75rem);
+  min-width: var(--person-bot-col, 4.75rem);
+  max-width: var(--person-bot-col, 4.75rem);
   min-height: 22px;
-  padding: 2px 5px;
+  padding: 4px 2px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: transparent;
@@ -572,7 +575,10 @@ dialog {
   font-size: 0.58rem;
   font-weight: 700;
   line-height: 1.1;
+  text-align: center;
   cursor: pointer;
+  justify-self: end;
+  align-self: center;
 }
 
 .bot-toggle.active {
@@ -690,6 +696,21 @@ dialog {
   width: 100%;
 }
 
+.person-money-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--person-bot-col, 4.75rem);
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.person-money-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .person-line-stats {
   color: rgba(169, 180, 199, 0.9);
   font-size: 0.7rem;
@@ -720,10 +741,11 @@ dialog {
   margin: 0;
   font-size: 0.94rem;
   font-weight: 800;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.2;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .person-balance {
@@ -900,6 +922,61 @@ dialog {
   font-size: 0.68rem;
   line-height: 1.25;
   width: 100%;
+}
+
+.person-card-detailed .person-head-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.person-card-detailed .person-line-head {
+  width: 100%;
+}
+
+.person-details-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.person-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.person-detail-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(169, 180, 199, 0.62);
+  letter-spacing: 0.02em;
+}
+
+.person-detail-value {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: rgba(221, 228, 240, 0.94);
+  word-break: break-word;
+  white-space: normal;
+}
+
+.person-detail-comment-row[hidden] {
+  display: none;
+}
+
+.person-copy-actions-detailed {
+  margin-top: 8px;
+}
+
+.person-copy-actions-detailed .copy-chip {
+  flex: 1 1 calc(50% - 5px);
+  min-width: 0;
 }
 
 .person-details-line {
