@@ -328,6 +328,7 @@ dialog {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 5px 6px;
   align-items: start;
+  padding-bottom: 8px;
 }
 
 .folder-list-flow {
@@ -337,6 +338,7 @@ dialog {
   flex-wrap: wrap;
   gap: 5px;
   min-width: 0;
+  align-items: flex-start;
 }
 
 .banks-controls {
@@ -346,7 +348,7 @@ dialog {
   flex-shrink: 0;
   grid-column: 3;
   grid-row: 1;
-  align-self: center;
+  align-self: start;
 }
 
 .banks-controls .mini {
@@ -369,23 +371,30 @@ dialog {
 .banks-bar > .inline-label {
   grid-column: 1;
   grid-row: 1;
-  align-self: center;
+  align-self: start;
+  line-height: 28px;
 }
 
 .folder-row {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
-  margin-top: 6px;
-  flex-wrap: wrap;
+  align-items: start;
+  margin-top: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
-.folder-row .inline-label {
-  flex-shrink: 0;
+.folder-row > .inline-label {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  line-height: 28px;
 }
 
 .folder-row .folder-list {
-  flex: 1;
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
 }
 
@@ -517,12 +526,29 @@ dialog {
   margin: 10px 0;
 }
 
+.people.is-reorder-active {
+  touch-action: none;
+}
+
 .person-card {
   border-radius: 16px;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  touch-action: pan-y;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.person-card.is-dragging {
+  position: relative;
+  z-index: 3;
+  transform: scale(1.02);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  touch-action: none;
 }
 
 .person-head-row {
@@ -1306,36 +1332,62 @@ label {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.amount-preview strong {
-  font-size: 2rem;
-}
-
-.quick-grid {
+.amount-preview-input {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 6px;
 }
 
-.quick-grid button {
+.amount-preview-input input {
+  width: 100%;
+  min-height: 48px;
   padding: 0;
-  min-height: 40px;
-  font-size: 0.82rem;
-  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 2rem;
+  font-weight: 800;
+  text-align: right;
 }
 
-.manual-row input {
-  flex: 1;
+.amount-preview-input input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
 }
 
-.amount-aux-row {
-  display: flex;
+.amount-preview-input input:focus {
+  outline: none;
+}
+
+.amount-keypad {
+  margin-top: 2px;
+}
+
+.amount-keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
-.amount-aux-row button {
-  flex: 1;
-  min-height: 40px;
-  font-size: 0.78rem;
+.amount-key {
+  min-height: 52px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.amount-key:active {
+  background: rgba(110, 168, 254, 0.22);
+}
+
+.amount-key-enter {
+  background: rgba(110, 168, 254, 0.32);
+  color: #e8f1ff;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .checkbox-row {
@@ -1414,14 +1466,8 @@ label {
     font-size: 0.6rem;
   }
 
-  .quick-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 5px;
-  }
-
-  .quick-grid button {
-    min-height: 34px;
-    font-size: 0.68rem;
-    border-radius: 8px;
+  .amount-key {
+    min-height: 48px;
+    font-size: 1.2rem;
   }
 }
