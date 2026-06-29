@@ -28,7 +28,8 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "116";
+const APP_BUILD = "125";
+const PERSON_DRAG_LONG_PRESS_MS = 450;
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -160,7 +161,6 @@ function blurActiveInput() {
     active.blur();
   }
 }
-const QUICK_AMOUNTS = [1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
 const TYPE_LABELS = {
   income: "Пополнение",
   purchase: "Покупка",
@@ -218,7 +218,8 @@ try {
 }
 let editingPersonId = null;
 let currentOperation = null;
-let amountChangeStack = [];
+let personDragSession = null;
+let amountEntryText = "";
 let deferredInstallPrompt = null;
 let activeView = "main";
 let activeHistoryPeriod = null;
@@ -294,14 +295,8 @@ const elements = {
   operationForm: document.querySelector("#operationForm"),
   operationPerson: document.querySelector("#operationPerson"),
   operationTitle: document.querySelector("#operationTitle"),
-  selectedAmount: document.querySelector("#selectedAmount"),
-  addAmountModeButton: document.querySelector("#addAmountModeButton"),
-  subtractAmountModeButton: document.querySelector("#subtractAmountModeButton"),
-  amountButtons: document.querySelector("#amountButtons"),
-  manualAmountInput: document.querySelector("#manualAmountInput"),
-  addManualAmountButton: document.querySelector("#addManualAmountButton"),
-  undoAmountButton: document.querySelector("#undoAmountButton"),
-  clearAmountButton: document.querySelector("#clearAmountButton"),
+  selectedAmountInput: document.querySelector("#selectedAmountInput"),
+  amountKeypad: document.querySelector("#amountKeypad"),
   transferToggleRow: document.querySelector("#transferToggleRow"),
   transferCheckbox: document.querySelector("#transferCheckbox"),
   noteInput: document.querySelector("#noteInput"),
@@ -326,7 +321,6 @@ function init() {
       document.body.classList.add("android-webview");
     }
     renderAppVersion();
-    renderAmountButtons();
     bindEvents();
     setupSyncDialogMode();
     reconcileStaleBotPending();
@@ -1172,6 +1166,12 @@ function bindEvents() {
   }
   elements.cancelPersonButton.addEventListener("click", () => closeAppDialog(elements.personDialog));
   elements.personForm.addEventListener("submit", savePerson);
+  if (elements.personCardNumberInput) {
+    elements.personCardNumberInput.addEventListener("input", handleCardNumberInput);
+  }
+  if (elements.personCardDetailsInput) {
+    elements.personCardDetailsInput.addEventListener("input", handleCardDetailsInput);
+  }
   elements.addFolderButton.addEventListener("click", openFolderDialog);
   elements.deleteFolderButton.addEventListener("click", openDeleteFolderDialog);
   elements.cancelFolderButton.addEventListener("click", () => closeAppDialog(elements.folderDialog));
@@ -1215,23 +1215,16 @@ function bindEvents() {
   });
 
   elements.peopleList.addEventListener("click", handlePeopleClick);
+  bindPeopleDragReorder();
   elements.detailsPeopleList.addEventListener("click", handleDetailsPeopleClick);
   elements.detailsCopyAll.addEventListener("click", handleDetailsCopyAllClick);
   elements.operationForm.addEventListener("submit", confirmOperation);
   elements.cancelOperationButton.addEventListener("click", closeOperationDialog);
   elements.exitOperationButton.addEventListener("click", closeOperationDialog);
-  elements.addManualAmountButton.addEventListener("click", addManualAmount);
-  elements.undoAmountButton.addEventListener("click", undoAmountInput);
-  elements.clearAmountButton.addEventListener("click", clearAmountAll);
-  elements.manualAmountInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      addManualAmount();
-    }
-  });
+  if (elements.amountKeypad) {
+    elements.amountKeypad.addEventListener("click", handleAmountKeypadClick);
+  }
   elements.resetAmountButton.addEventListener("click", clearAmountAll);
-  elements.addAmountModeButton.addEventListener("click", () => setAmountMode("plus"));
-  elements.subtractAmountModeButton.addEventListener("click", () => setAmountMode("minus"));
 
   elements.installButton.addEventListener("click", async () => {
     if (!deferredInstallPrompt) return;
@@ -1990,6 +1983,7 @@ function buildPersonCard(person, stats, detailed) {
   const card = document.createElement("article");
   card.className = detailed ? "person-card person-card-detailed" : "person-card";
   card.dataset.personId = person.id;
+  card.draggable = false;
   const topActionsHtml = detailed
     ? ""
     : `
@@ -2111,6 +2105,152 @@ function renderPeopleList(container, detailed) {
   });
 
   container.append(fragment);
+}
+
+function sortPeopleByListOrder(people) {
+  const order = new Map(state.people.map((person, index) => [person.id, index]));
+  return [...people].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
+function resetPersonDragSession(container) {
+  if (!personDragSession) return;
+  if (personDragSession.timer) clearTimeout(personDragSession.timer);
+  if (personDragSession.card) {
+    personDragSession.card.classList.remove("is-dragging");
+  }
+  if (container) container.classList.remove("is-reorder-active");
+  personDragSession = null;
+}
+
+function bindPeopleDragReorder() {
+  const container = elements.peopleList;
+  if (!container || container.dataset.dragBound === "1") return;
+  container.dataset.dragBound = "1";
+
+  function onLongPressReady() {
+    if (!personDragSession || personDragSession.dragging) return;
+    personDragSession.dragging = true;
+    personDragSession.card.classList.add("is-dragging");
+    container.classList.add("is-reorder-active");
+    try {
+      personDragSession.card.setPointerCapture(personDragSession.pointerId);
+    } catch {
+      // ignore capture errors
+    }
+    if (window.getSelection) {
+      const selection = window.getSelection();
+      if (selection) selection.removeAllRanges();
+    }
+    if (navigator.vibrate) navigator.vibrate(25);
+  }
+
+  container.addEventListener("selectstart", (event) => {
+    if (personDragSession?.dragging) event.preventDefault();
+  });
+
+  container.addEventListener("dragstart", (event) => {
+    if (event.target.closest(".person-card")) event.preventDefault();
+  });
+
+  container.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const card = event.target.closest(".person-card");
+    if (!card || !container.contains(card)) return;
+    if (event.target.closest("button, a, input, select, textarea, label")) return;
+
+    event.preventDefault();
+    resetPersonDragSession(container);
+    const longPressMs = event.pointerType === "mouse" ? 280 : PERSON_DRAG_LONG_PRESS_MS;
+    personDragSession = {
+      personId: card.dataset.personId,
+      card,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      dragging: false,
+      timer: setTimeout(onLongPressReady, longPressMs),
+    };
+  });
+
+  container.addEventListener("pointermove", (event) => {
+    if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
+    if (!personDragSession.dragging) return;
+    event.preventDefault();
+    updatePersonDragPosition(container, personDragSession.card, event.clientY);
+  });
+
+  container.addEventListener("pointerup", (event) => {
+    if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
+    const wasDragging = personDragSession.dragging;
+    if (wasDragging) {
+      commitPeopleOrderFromDom(container);
+      event.preventDefault();
+    }
+    resetPersonDragSession(container);
+  });
+
+  container.addEventListener("pointercancel", (event) => {
+    if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
+    if (personDragSession.dragging) renderPeople();
+    resetPersonDragSession(container);
+  });
+}
+
+function updatePersonDragPosition(container, draggedCard, clientY) {
+  const others = [...container.querySelectorAll(".person-card")].filter((card) => card !== draggedCard);
+  let insertBefore = null;
+  others.forEach((card) => {
+    if (insertBefore) return;
+    const rect = card.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (clientY < mid) insertBefore = card;
+  });
+  if (insertBefore) {
+    if (draggedCard !== insertBefore && draggedCard.nextElementSibling !== insertBefore) {
+      container.insertBefore(draggedCard, insertBefore);
+    }
+    return;
+  }
+  if (draggedCard !== container.lastElementChild) {
+    container.appendChild(draggedCard);
+  }
+}
+
+function commitPeopleOrderFromDom(container) {
+  const orderedVisibleIds = [...container.querySelectorAll(".person-card")]
+    .map((card) => card.dataset.personId)
+    .filter(Boolean);
+  if (!orderedVisibleIds.length) return;
+
+  const visibleSet = new Set(orderedVisibleIds);
+  const byId = new Map(state.people.map((person) => [person.id, person]));
+  const visiblePeople = orderedVisibleIds.map((id) => byId.get(id)).filter(Boolean);
+  if (visiblePeople.length !== orderedVisibleIds.length) return;
+
+  const previousOrder = state.people.map((person) => person.id).join("|");
+  const remaining = state.people.filter((person) => !visibleSet.has(person.id));
+  const firstVisibleIndex = state.people.findIndex((person) => visibleSet.has(person.id));
+  let insertIndex = 0;
+  if (firstVisibleIndex >= 0) {
+    for (let i = 0; i < firstVisibleIndex; i += 1) {
+      if (!visibleSet.has(state.people[i].id)) insertIndex += 1;
+    }
+  } else {
+    insertIndex = remaining.length;
+  }
+
+  state.people = [
+    ...remaining.slice(0, insertIndex),
+    ...visiblePeople,
+    ...remaining.slice(insertIndex),
+  ];
+
+  const nextOrder = state.people.map((person) => person.id).join("|");
+  if (previousOrder === nextOrder) return;
+
+  markLocalEditPending();
+  saveState();
+  renderPeople();
 }
 
 function setPersonDetailLine(element, value) {
@@ -2235,7 +2375,7 @@ function getVisiblePeople() {
   }
 
   if (activeFirstNames.length === 0) {
-    return people;
+    return sortPeopleByListOrder(people);
   }
 
   const addedIds = new Set();
@@ -2249,7 +2389,7 @@ function getVisiblePeople() {
     });
   });
 
-  return namePeople;
+  return sortPeopleByListOrder(namePeople);
 }
 
 function activateFiltersForPerson(person, { isNew = false } = {}) {
@@ -2592,8 +2732,8 @@ function openPersonDialog(person = null) {
   elements.personLastNameInput.value = person?.lastName ?? "";
   elements.personBalanceInput.value = person ? String(person.balance) : "";
   elements.personPhoneInput.value = person?.phone ?? "";
-  elements.personCardNumberInput.value = person?.cardNumber ?? "";
-  elements.personCardDetailsInput.value = person?.cardDetails ?? "";
+  elements.personCardNumberInput.value = formatCardNumberForInput(person?.cardNumber ?? "");
+  elements.personCardDetailsInput.value = formatCardDetailsForInput(person?.cardDetails ?? "");
   elements.personProfileNoteInput.value = person?.profileNote ?? "";
   if (elements.personUseInBotCheckbox) {
     elements.personUseInBotCheckbox.checked = Boolean(person?.useInBot);
@@ -2825,21 +2965,58 @@ function deleteEditingPerson() {
   }
 }
 
-function renderAmountButtons() {
-  const fragment = document.createDocumentFragment();
-  QUICK_AMOUNTS.forEach((amount) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.amount = String(amount);
-    button.textContent = `+${formatMoney(amount)}`;
-    button.addEventListener("click", () => {
-      if (!currentOperation) return;
-      const multiplier = currentOperation.amountMode === "minus" ? -1 : 1;
-      applyAmountChange(currentOperation.amount + amount * multiplier);
-    });
-    fragment.append(button);
-  });
-  elements.amountButtons.append(fragment);
+function handleAmountKeypadClick(event) {
+  const button = event.target.closest("button[data-digit], button[data-action]");
+  if (!button || !currentOperation) return;
+  const digit = button.dataset.digit;
+  const action = button.dataset.action;
+  if (digit != null) {
+    appendAmountDigit(digit);
+    return;
+  }
+  if (action === "backspace") {
+    backspaceAmountEntry();
+    return;
+  }
+  if (action === "enter") {
+    finalizeAmountEntry();
+    if (currentOperation.amount > 0) {
+      elements.operationForm?.requestSubmit();
+    }
+  }
+}
+
+function appendAmountDigit(digit) {
+  if (!currentOperation) return;
+  if (amountEntryText.length >= 12) return;
+  if (amountEntryText === "0") {
+    amountEntryText = digit;
+  } else {
+    amountEntryText += digit;
+  }
+  applyAmountEntryText();
+}
+
+function backspaceAmountEntry() {
+  amountEntryText = amountEntryText.slice(0, -1);
+  applyAmountEntryText();
+}
+
+function applyAmountEntryText() {
+  if (!currentOperation || !elements.selectedAmountInput) return;
+  const amount = parseAmount(amountEntryText);
+  currentOperation.amount = Math.max(0, amount);
+  elements.selectedAmountInput.value = amountEntryText || "";
+  elements.confirmOperationButton.disabled = amount <= 0;
+}
+
+function finalizeAmountEntry() {
+  if (!currentOperation || !elements.selectedAmountInput) return;
+  const amount = parseAmount(amountEntryText);
+  currentOperation.amount = Math.max(0, amount);
+  amountEntryText = amount > 0 ? String(amount).replace(".", ",") : "";
+  elements.selectedAmountInput.value = amount > 0 ? formatMoney(amount) : "";
+  elements.confirmOperationButton.disabled = amount <= 0;
 }
 
 function openOperationDialog(person, direction) {
@@ -2847,7 +3024,6 @@ function openOperationDialog(person, direction) {
     personId: person.id,
     direction,
     amount: 0,
-    amountMode: "plus",
   };
 
   elements.operationPerson.textContent = person.name;
@@ -2856,76 +3032,35 @@ function openOperationDialog(person, direction) {
   elements.transferToggleRow.hidden = direction === "plus";
   elements.transferCheckbox.checked = false;
   elements.noteInput.value = "";
-  elements.manualAmountInput.value = "";
-  amountChangeStack = [];
-  setAmountMode("plus");
+  amountEntryText = "";
   updateSelectedAmount(0);
   openAppDialog(elements.operationDialog);
 }
 
 function closeOperationDialog() {
   currentOperation = null;
-  amountChangeStack = [];
+  amountEntryText = "";
   closeAppDialog(elements.operationDialog);
 }
 
-function addManualAmount() {
-  if (!currentOperation) return;
-  const amount = parseAmount(elements.manualAmountInput.value);
-  if (amount <= 0) return;
-  const multiplier = currentOperation.amountMode === "minus" ? -1 : 1;
-  applyAmountChange(currentOperation.amount + amount * multiplier);
-  elements.manualAmountInput.value = "";
-}
-
-function pushAmountState() {
-  if (!currentOperation) return;
-  amountChangeStack.push(currentOperation.amount);
-}
-
-function applyAmountChange(amount) {
-  pushAmountState();
-  updateSelectedAmount(amount);
-}
-
-function undoAmountInput() {
-  const manualValue = elements.manualAmountInput.value;
-  if (manualValue.length > 0) {
-    elements.manualAmountInput.value = manualValue.slice(0, -1);
-    return;
-  }
-  if (amountChangeStack.length === 0) return;
-  updateSelectedAmount(amountChangeStack.pop());
-}
-
 function clearAmountAll() {
-  elements.manualAmountInput.value = "";
-  amountChangeStack = [];
+  amountEntryText = "";
   updateSelectedAmount(0);
 }
 
 function updateSelectedAmount(amount) {
   if (!currentOperation) return;
   currentOperation.amount = Math.max(0, amount);
-  elements.selectedAmount.textContent = formatMoney(currentOperation.amount);
-  elements.confirmOperationButton.disabled = currentOperation.amount <= 0;
-}
-
-function setAmountMode(mode) {
-  if (!currentOperation) return;
-  currentOperation.amountMode = mode;
-  const isMinus = mode === "minus";
-  elements.addAmountModeButton.classList.toggle("active", !isMinus);
-  elements.subtractAmountModeButton.classList.toggle("active", isMinus);
-  elements.amountButtons.querySelectorAll("button").forEach((button) => {
-    const amount = Number(button.dataset.amount);
-    button.textContent = `${isMinus ? "-" : "+"}${formatMoney(amount)}`;
-  });
-  elements.addManualAmountButton.textContent = isMinus ? "Убавить" : "Добавить";
+  amountEntryText = amount > 0 ? String(amount).replace(".", ",") : "";
+  if (elements.selectedAmountInput) {
+    elements.selectedAmountInput.value = amount > 0 ? formatMoney(amount) : "";
+  }
+  elements.confirmOperationButton.disabled = amount <= 0;
 }
 
 function confirmOperation(event) {
   event.preventDefault();
+  finalizeAmountEntry();
   if (!currentOperation || currentOperation.amount <= 0) return;
 
   const person = state.people.find((item) => item.id === currentOperation.personId);
@@ -3016,6 +3151,107 @@ function syncTabs(type) {
   document.querySelectorAll(".tab[data-type]").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.type === type);
   });
+}
+
+const CARD_DETAILS_GROUP_GAP = "   ";
+const CARD_DETAILS_ENTRY_DIGITS = 7;
+
+function countNonSpaceCharsBefore(text, cursor) {
+  let count = 0;
+  const limit = Math.min(cursor, text.length);
+  for (let i = 0; i < limit; i += 1) {
+    if (text[i] !== " ") count += 1;
+  }
+  return count;
+}
+
+function restoreInputCursor(input, newValue, charsBeforeCursor) {
+  let pos = 0;
+  let seen = 0;
+  for (let i = 0; i < newValue.length; i += 1) {
+    if (newValue[i] !== " ") seen += 1;
+    pos = i + 1;
+    if (seen >= charsBeforeCursor) break;
+  }
+  if (seen < charsBeforeCursor) pos = newValue.length;
+  input.setSelectionRange(pos, pos);
+}
+
+function formatSingleCardDetailsEntry(digits) {
+  if (!digits) return "";
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  const expiry = `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
+  let rest = digits.slice(4);
+  const groups = [];
+  while (rest.length > 0) {
+    groups.push(rest.slice(0, 3));
+    rest = rest.slice(3);
+  }
+  return `${expiry}${CARD_DETAILS_GROUP_GAP}${groups.join(CARD_DETAILS_GROUP_GAP)}`;
+}
+
+function formatCardDetailsFromDigits(digits) {
+  const entries = [];
+  for (let i = 0; i < digits.length; i += CARD_DETAILS_ENTRY_DIGITS) {
+    entries.push(digits.slice(i, i + CARD_DETAILS_ENTRY_DIGITS));
+  }
+  return entries.map((entryDigits) => formatSingleCardDetailsEntry(entryDigits)).join(" / ");
+}
+
+function formatCardDetailsForInput(value) {
+  const compact = String(value ?? "").replace(/\s/g, "");
+  if (!compact) return "";
+  if (/[^\d/]/.test(compact)) return compact;
+  const digitsOnly = compact.replace(/\//g, "");
+  if (!digitsOnly) return "";
+  return formatCardDetailsFromDigits(digitsOnly);
+}
+
+function handleCardDetailsInput() {
+  const input = elements.personCardDetailsInput;
+  if (!input) return;
+  const raw = input.value;
+  const cursor = input.selectionStart ?? raw.length;
+  const charsBeforeCursor = countNonSpaceCharsBefore(raw, cursor);
+  const compact = raw.replace(/\s/g, "");
+  const newValue = /[^\d/]/.test(compact)
+    ? compact
+    : formatCardDetailsFromDigits(compact.replace(/\//g, ""));
+  if (newValue === raw) return;
+  input.value = newValue;
+  restoreInputCursor(input, newValue, charsBeforeCursor);
+}
+
+function formatCardDigitGroups(digits) {
+  const parts = [];
+  for (let i = 0; i < digits.length; i += 4) {
+    parts.push(digits.slice(i, i + 4));
+  }
+  return parts.join(" ");
+}
+
+function formatCardNumberForInput(value) {
+  const raw = String(value ?? "");
+  const stripped = raw.replace(/\s/g, "");
+  if (!stripped) return "";
+  if (/[^\d]/.test(stripped)) return stripped;
+  return formatCardDigitGroups(stripped);
+}
+
+function handleCardNumberInput() {
+  const input = elements.personCardNumberInput;
+  if (!input) return;
+  const raw = input.value;
+  const cursor = input.selectionStart ?? raw.length;
+  const charsBeforeCursor = countNonSpaceCharsBefore(raw, cursor);
+  const stripped = raw.replace(/\s/g, "");
+  const newValue = /[^\d]/.test(stripped)
+    ? stripped
+    : formatCardDigitGroups(stripped);
+  if (newValue === raw) return;
+  input.value = newValue;
+  restoreInputCursor(input, newValue, charsBeforeCursor);
 }
 
 function parseAmount(value) {
