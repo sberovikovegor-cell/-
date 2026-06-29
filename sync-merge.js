@@ -150,24 +150,42 @@
     return -amount;
   }
 
+  function lastHistoryTimeForPerson(personId, history) {
+    let max = 0;
+    (history || []).forEach((entry) => {
+      if (entry.personId === personId) {
+        max = Math.max(max, Number(entry.createdAt || 0));
+      }
+    });
+    return max;
+  }
+
   function replayBalancesFromHistory(people, history) {
     const sorted = [...(history || [])].sort(
       (a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0),
     );
 
     return (people || []).map((person) => {
+      const pickedBalance = Number(person.balance || 0);
+      const balanceAt = fieldTime(person, "balance");
+      const lastHistAt = lastHistoryTimeForPerson(person.id, sorted);
       const personHistory = sorted.filter((h) => h.personId === person.id);
       if (personHistory.length === 0) {
-        return { ...person, balance: Number(person.balance || 0) };
+        return { ...person, balance: pickedBalance };
       }
 
       const first = personHistory[0];
       const firstDelta = historyDelta(first);
-      let balance = Number(first.balanceAfter || 0) - firstDelta;
+      let replayedBalance = Number(first.balanceAfter || 0) - firstDelta;
       personHistory.forEach((entry) => {
-        balance += historyDelta(entry);
+        replayedBalance += historyDelta(entry);
       });
-      return { ...person, balance: Math.round(balance * 100) / 100 };
+      replayedBalance = Math.round(replayedBalance * 100) / 100;
+
+      if (balanceAt > lastHistAt && pickedBalance !== replayedBalance) {
+        return { ...person, balance: pickedBalance };
+      }
+      return { ...person, balance: replayedBalance };
     });
   }
 
