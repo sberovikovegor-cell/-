@@ -99,23 +99,37 @@
         merged[field] = pickField(localPerson, remotePerson, field);
       });
       merged.fieldUpdatedAt = mergeFieldUpdatedAt(localPerson, remotePerson);
+      const pickedUseInBot = Boolean(pickField(localPerson, remotePerson, "useInBot"));
+      merged.useInBot = pickedUseInBot;
+      merged.botSlotIndex = pickField(localPerson, remotePerson, "botSlotIndex");
+
+      const localUseTime = fieldTime(localPerson, "useInBot");
+      const remoteUseTime = fieldTime(remotePerson, "useInBot");
+      const confirmedWinner = remoteUseTime > localUseTime ? remotePerson : localPerson;
+      if (confirmedWinner.botConfirmedInBot != null) {
+        merged.botConfirmedInBot = Boolean(confirmedWinner.botConfirmedInBot);
+      } else {
+        merged.botConfirmedInBot = pickedUseInBot;
+      }
+
+      // Ожидание ответа ПК-бота — только на этом устройстве, не через канал.
       if (localPerson.botPendingSync) {
-        merged.useInBot = localPerson.useInBot;
-        merged.botConfirmedInBot = localPerson.botConfirmedInBot;
-        merged.botSlotIndex = localPerson.botSlotIndex;
         merged.botPendingSync = true;
         merged.botPendingAction = localPerson.botPendingAction;
-      } else {
-        merged.botPendingSync = Boolean(localPerson.botPendingSync || remotePerson.botPendingSync);
-        if (remotePerson.botConfirmedInBot != null || localPerson.botConfirmedInBot != null) {
-          const localTime = fieldTime(localPerson, "useInBot");
-          const remoteTime = fieldTime(remotePerson, "useInBot");
-          if (remoteTime > localTime && remotePerson.botConfirmedInBot != null) {
-            merged.botConfirmedInBot = remotePerson.botConfirmedInBot;
-          } else if (localPerson.botConfirmedInBot != null) {
-            merged.botConfirmedInBot = localPerson.botConfirmedInBot;
-          }
+        if (localPerson.botPendingAction === "upsert") {
+          merged.useInBot = true;
+          merged.botConfirmedInBot = localPerson.botConfirmedInBot != null
+            ? Boolean(localPerson.botConfirmedInBot)
+            : true;
+        } else if (localPerson.botPendingAction === "clear") {
+          merged.useInBot = Boolean(localPerson.useInBot);
+          merged.botConfirmedInBot = localPerson.botConfirmedInBot != null
+            ? Boolean(localPerson.botConfirmedInBot)
+            : false;
         }
+      } else {
+        merged.botPendingSync = false;
+        merged.botPendingAction = null;
       }
       merged.createdAt = Math.min(
         Number(localPerson.createdAt || Date.now()),
