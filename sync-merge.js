@@ -360,9 +360,6 @@
     const localNames = (localState?.activeFirstNames || []).filter((name) => peopleFirstNames.has(name));
     const remoteNames = (remoteState?.activeFirstNames || []).filter((name) => peopleFirstNames.has(name));
 
-    const localUi = Number(localState?.uiUpdatedAt || 0);
-    const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
-
     const activeFolderIds = remoteUi > localUi
       ? (remoteActive.length ? remoteActive : localActive)
       : localActive;
