@@ -371,7 +371,9 @@
     let people = dedupePeopleById(mergePeople(localState?.people, remoteState?.people));
     const localUi = Number(localState?.uiUpdatedAt || 0);
     const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
-    const orderTemplate = localUi >= remoteUi
+    const localOrderAt = Number(localState?.peopleOrderUpdatedAt || 0);
+    const remoteOrderAt = Number(remoteState?.peopleOrderUpdatedAt || 0);
+    const orderTemplate = localOrderAt >= remoteOrderAt
       ? (localState?.people || [])
       : (remoteState?.people || []);
     people = orderPeopleLike(orderTemplate, people);
@@ -432,6 +434,7 @@
         : Boolean(localState?.singleFilterMode),
       botGroupId,
       uiUpdatedAt: Math.max(localUi, remoteUi),
+      peopleOrderUpdatedAt: Math.max(localOrderAt, remoteOrderAt),
       wipedAtMs: Math.max(
         Number(localState?.wipedAtMs || 0),
         Number(remoteState?.wipedAtMs || 0),
