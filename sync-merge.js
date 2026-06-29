@@ -167,6 +167,40 @@
     return result;
   }
 
+  function dedupePeopleById(people) {
+    const map = new Map();
+    (people || []).forEach((person) => {
+      if (person?.id && !map.has(person.id)) {
+        map.set(person.id, person);
+      }
+    });
+    return [...map.values()];
+  }
+
+  function orderPeopleLike(templatePeople, mergedPeople) {
+    const byId = new Map();
+    (mergedPeople || []).forEach((person) => {
+      if (person?.id) byId.set(person.id, person);
+    });
+    const ordered = [];
+    const seen = new Set();
+    (templatePeople || []).forEach((person) => {
+      if (!person?.id || seen.has(person.id)) return;
+      const merged = byId.get(person.id);
+      if (merged) {
+        ordered.push(merged);
+        seen.add(person.id);
+      }
+    });
+    (mergedPeople || []).forEach((person) => {
+      if (person?.id && !seen.has(person.id)) {
+        ordered.push(person);
+        seen.add(person.id);
+      }
+    });
+    return ordered;
+  }
+
   function historyDelta(entry) {
     const amount = Number(entry.amount || 0);
     if (entry.direction === "plus") return amount;
@@ -294,7 +328,13 @@
       remoteState?.history,
       historyClearedAtMs,
     );
-    let people = mergePeople(localState?.people, remoteState?.people);
+    let people = dedupePeopleById(mergePeople(localState?.people, remoteState?.people));
+    const localUi = Number(localState?.uiUpdatedAt || 0);
+    const remoteUi = Number(remoteState?.uiUpdatedAt || 0);
+    const orderTemplate = localUi >= remoteUi
+      ? (localState?.people || [])
+      : (remoteState?.people || []);
+    people = orderPeopleLike(orderTemplate, people);
     people = people.map((person) => ({
       ...person,
       folderIds: Array.isArray(person.folderIds)
@@ -370,6 +410,8 @@
     mergeHistory,
     mergeHistoryMonths,
     mergePeople,
+    dedupePeopleById,
+    orderPeopleLike,
     mergeFolders,
     replayBalancesFromHistory,
     PROFILE_FIELDS,
