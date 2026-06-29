@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "87";
+const APP_BUILD = "89";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -349,9 +349,7 @@ function reconcileStaleBotPending() {
 
 function resetAllBotPendingUi() {
   state.people = state.people.map((person) => {
-    const confirmed = person.botConfirmedInBot != null
-      ? person.botConfirmedInBot
-      : person.useInBot;
+    const confirmed = resolvePersonInBotFlag(person);
     return normalizePerson({
       ...person,
       botPendingSync: false,
@@ -697,6 +695,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
     }
   }
   reconcileFiltersAfterSync();
+  reconcileBotPendingFromRemote(normalizedRemote);
   tryConfirmCloudSync(state);
   render();
 }
@@ -1226,6 +1225,11 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   state = applyDeletedPersonFilter(
     applyDeletedFolderFilter(normalizeLoadedState(filterRemotePeople(ensureStateDataEpoch(normalizedRemote)))),
   );
+  state.people = (state.people || []).map((person) => normalizePerson({
+    ...person,
+    botPendingSync: false,
+    botPendingAction: null,
+  }));
   state.deletedPersonIds = [...(state.deletedPersonIds || [])];
   state.deletedFolderIds = [...(state.deletedFolderIds || [])];
   localStorage.setItem(DELETED_PERSON_IDS_KEY, JSON.stringify(state.deletedPersonIds));
@@ -1241,6 +1245,7 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
     localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
   }
   reconcileFiltersAfterSync();
+  reconcileBotPendingFromRemote(normalizedRemote);
   tryConfirmCloudSync(state);
   render();
 }
@@ -1405,6 +1410,78 @@ function normalizeLoadedState(parsed) {
   };
 }
 
+function resolvePersonInBotFlag(person) {
+  if (!person) return false;
+  if (person.botPendingSync && person.botPendingAction === "upsert") return true;
+  if (person.botPendingSync && person.botPendingAction === "clear") return false;
+  if (person.botConfirmedInBot != null) return Boolean(person.botConfirmedInBot);
+  return Boolean(person.useInBot);
+}
+
+function sanitizePersonForCloud(person) {
+  const normalized = normalizePerson(person);
+  const inBot = resolvePersonInBotFlag(normalized);
+  return normalizePerson({
+    ...normalized,
+    useInBot: inBot,
+    botConfirmedInBot: inBot,
+    botPendingSync: false,
+    botPendingAction: null,
+  });
+}
+
+function sanitizeStateForCloud(appState) {
+  if (!appState) return appState;
+  return {
+    ...appState,
+    people: (appState.people || []).map((person) => sanitizePersonForCloud(person)),
+  };
+}
+
+window.sanitizeStateForCloud = sanitizeStateForCloud;
+
+function reconcileBotPendingFromRemote(normalizedRemote) {
+  if (!hasBotPendingSync() || !normalizedRemote) return;
+  const remoteById = new Map((normalizedRemote.people || []).map((person) => [person.id, person]));
+  state.people = state.people.map((person) => {
+    if (!person.botPendingSync) return normalizePerson(person);
+    const remote = remoteById.get(person.id);
+    if (!remote) return normalizePerson(person);
+    const remoteInBot = remote.botConfirmedInBot != null
+      ? Boolean(remote.botConfirmedInBot)
+      : Boolean(remote.useInBot);
+    if (person.botPendingAction === "upsert" && remoteInBot) {
+      return normalizePerson({
+        ...person,
+        useInBot: true,
+        botConfirmedInBot: true,
+        botSlotIndex: remote.botSlotIndex != null ? remote.botSlotIndex : person.botSlotIndex,
+        botPendingSync: false,
+        botPendingAction: null,
+      });
+    }
+    if (person.botPendingAction === "clear" && !remoteInBot) {
+      return normalizePerson({
+        ...person,
+        useInBot: false,
+        botConfirmedInBot: false,
+        botSlotIndex: null,
+        botPendingSync: false,
+        botPendingAction: null,
+      });
+    }
+    return normalizePerson(person);
+  });
+  if (!hasBotPendingSync()) {
+    localStorage.removeItem(PENDING_BOT_REVISION_KEY);
+    localStorage.removeItem(PENDING_BOT_AT_KEY);
+    if (window.FamilySync?.stopPendingBotPoll) {
+      FamilySync.stopPendingBotPoll();
+    }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
 function normalizePerson(person) {
   let firstName = String(person.firstName ?? "").trim();
   let lastName = String(person.lastName ?? "").trim();
@@ -1419,8 +1496,12 @@ function normalizePerson(person) {
   const hasExplicitConfirmed = person.botConfirmedInBot != null;
   const confirmed = hasExplicitConfirmed
     ? Boolean(person.botConfirmedInBot)
-    : (pending ? false : Boolean(person.useInBot));
-  const useInBot = pending ? Boolean(person.useInBot) : confirmed;
+    : Boolean(person.useInBot);
+  const useInBot = pending && person.botPendingAction === "upsert"
+    ? true
+    : (pending && person.botPendingAction === "clear"
+      ? Boolean(person.useInBot)
+      : confirmed);
 
   return {
     ...person,
@@ -1496,13 +1577,11 @@ function touchPersonUseInBot(personId, enabled, at = Date.now()) {
 }
 
 function getBotConfirmedInBot(person) {
-  if (person.botConfirmedInBot != null) return Boolean(person.botConfirmedInBot);
-  if (person.botPendingSync) return false;
-  return Boolean(person.useInBot);
+  return resolvePersonInBotFlag(person);
 }
 
 function getBotDisplayInBot(person) {
-  return getBotConfirmedInBot(person);
+  return resolvePersonInBotFlag(person);
 }
 
 function renderBotToggleButton(botToggle, person) {
@@ -1546,12 +1625,12 @@ function renderSyncNoticeRow() {
     text = "Изменения сохранены — отправим при подключении к сети";
     level = "warn";
   } else if (pending) {
-    text = "Есть несохранённые данные — подключитесь к сети";
+    text = "Ожидание ответа бота на ПК…";
     level = "warn";
   } else if (syncMsg) {
     text = `Синхронизация: ${syncMsg}`;
     level = alert?.level === "error" || (health && !health.ok) ? "error" : "warn";
-  } else if (successVisible) {
+  } else if (successVisible && !cloudPending && !hasBotPendingSync()) {
     text = "Данные успешно отправлены";
     level = "ok";
   }
@@ -1720,23 +1799,18 @@ function buildPersonCard(person, stats, detailed) {
     </div>`
     : "";
   card.innerHTML = `
-    <div class="person-head-row">
+    <div class="person-card-grid">
       <div class="person-line person-line-head">
         <span class="person-name"></span>
         <button class="edit-link" type="button" data-action="edit">Изм.</button>
       </div>
       ${topActionsHtml}
-    </div>
-    <div class="person-money-row">
-      <div class="person-money-col">
-        <div class="person-line person-line-balance">
-          <span class="person-balance"></span>
-          <span class="row-sep">·</span>
-          <span class="last-income"></span>
-        </div>
-        <div class="person-line person-line-stats">
-          <span class="person-stats-line"></span>
-        </div>
+      <div class="person-line person-line-money">
+        <span class="person-balance"></span>
+        <span class="row-sep">·</span>
+        <span class="last-income"></span>
+        <span class="row-sep person-stats-sep">·</span>
+        <span class="person-stats-line"></span>
       </div>
       <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
     </div>
@@ -3000,7 +3074,31 @@ async function runBotExportWorkerLoop() {
     }
 
     await waitForPersonBotApplied(person.id, 90000);
-    if (!state.people.find((item) => item.id === person.id)?.botPendingSync) {
+    const stillPending = state.people.find((item) => item.id === person.id);
+    if (stillPending?.botPendingSync) {
+      clearBotSentRevision(person.id);
+      const inBot = resolvePersonInBotFlag(stillPending);
+      state.people = state.people.map((item) => {
+        if (item.id !== person.id) return normalizePerson(item);
+        return normalizePerson({
+          ...item,
+          botPendingSync: false,
+          botPendingAction: null,
+          useInBot: inBot,
+          botConfirmedInBot: inBot,
+        });
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderBotPendingBanner();
+      render();
+      if (!hasBotPendingSync()) {
+        localStorage.removeItem(PENDING_BOT_REVISION_KEY);
+        localStorage.removeItem(PENDING_BOT_AT_KEY);
+        if (window.FamilySync?.stopPendingBotPoll) {
+          FamilySync.stopPendingBotPoll();
+        }
+      }
+    } else if (stillPending) {
       clearBotSentRevision(person.id);
     }
   }
@@ -3238,7 +3336,7 @@ function handleRemoteBotExport(botExport) {
       }
     }
     render();
-    if (window.FamilySync?.updateSyncStatus) {
+    if (window.FamilySync?.updateSyncStatus && !localStorage.getItem(CLOUD_CONFIRM_FP_KEY)) {
       FamilySync.updateSyncStatus("synced", "Синхронизировано");
     }
     return;
