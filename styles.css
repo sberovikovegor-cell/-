@@ -563,32 +563,52 @@ dialog {
 
 .bot-toggle {
   flex-shrink: 0;
-  width: var(--person-bot-col, 4.75rem);
-  min-width: var(--person-bot-col, 4.75rem);
-  max-width: var(--person-bot-col, 4.75rem);
-  min-height: 22px;
-  padding: 4px 2px;
+  box-sizing: border-box;
+  width: 26px;
+  min-width: 26px;
+  max-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
-  font-size: 0.58rem;
-  font-weight: 700;
-  line-height: 1.1;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
   text-align: center;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.person-line-balance .person-balance {
+  flex-shrink: 0;
+}
+
+.person-line-balance .row-sep {
+  flex-shrink: 0;
 }
 
 .person-line-balance .last-income {
-  flex: 0 1 auto;
-  max-width: 4.5rem;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .person-line-balance .bot-toggle {
-  width: auto;
-  min-width: 3.5rem;
-  max-width: 4.75rem;
-  margin-left: 6px;
+  width: 26px;
+  min-width: 26px;
+  max-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  margin-left: 4px;
+  flex-shrink: 0;
 }
 
 .bot-toggle.active {
@@ -605,8 +625,30 @@ dialog {
 
 .bot-toggle.pending {
   border-color: #ffd166;
-  color: #ffd166;
+  color: transparent;
   background: rgba(255, 209, 102, 0.14);
+}
+
+.bot-toggle.pending::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ffd166;
+  animation: bot-toggle-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bot-toggle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
 }
 
 .boot-error-screen {
@@ -705,6 +747,8 @@ dialog {
   line-height: 1.1;
   width: 100%;
   flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .person-money-row {
