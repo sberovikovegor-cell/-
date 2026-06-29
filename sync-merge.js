@@ -17,10 +17,12 @@
     "botSlotIndex",
   ];
 
-  function mergeHistory(localHistory, remoteHistory) {
+  function mergeHistory(localHistory, remoteHistory, clearedAtMs = 0) {
+    const effectiveClear = Number(clearedAtMs || 0);
     const map = new Map();
     [...(localHistory || []), ...(remoteHistory || [])].forEach((item) => {
       if (!item?.id) return;
+      if (effectiveClear > 0 && Number(item.createdAt || 0) <= effectiveClear) return;
       const existing = map.get(item.id);
       if (!existing || Number(item.createdAt || 0) > Number(existing.createdAt || 0)) {
         map.set(item.id, { ...item });
@@ -29,6 +31,29 @@
     return [...map.values()].sort(
       (a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0),
     );
+  }
+
+  function mergeHistoryMonths(localMonths, remoteMonths) {
+    const map = new Map();
+    [...(localMonths || []), ...(remoteMonths || [])].forEach((month) => {
+      if (!month || month.index == null) return;
+      const index = Number(month.index);
+      if (!Number.isFinite(index) || index < 1) return;
+      const existing = map.get(index);
+      const mergedEntries = existing
+        ? mergeHistory(existing.history, month.history, 0)
+        : mergeHistory([], month.history, 0);
+      map.set(index, {
+        index,
+        title: month.title || existing?.title || `Месяц ${index}`,
+        archivedAt: Math.max(
+          Number(existing?.archivedAt || 0),
+          Number(month.archivedAt || 0),
+        ),
+        history: mergedEntries,
+      });
+    });
+    return [...map.values()].sort((a, b) => a.index - b.index);
   }
 
   function mergeFolders(localFolders, remoteFolders) {
@@ -256,7 +281,19 @@
     let folders = mergeFolders(localState?.folders, remoteState?.folders)
       .filter((folder) => !deletedFolderSet.has(folder.id));
     const folderIds = new Set(folders.map((f) => f.id));
-    const history = mergeHistory(localState?.history, remoteState?.history);
+    const historyClearedAtMs = Math.max(
+      Number(localState?.historyClearedAtMs || 0),
+      Number(remoteState?.historyClearedAtMs || 0),
+    );
+    const historyMonths = mergeHistoryMonths(
+      localState?.historyMonths,
+      remoteState?.historyMonths,
+    );
+    const history = mergeHistory(
+      localState?.history,
+      remoteState?.history,
+      historyClearedAtMs,
+    );
     let people = mergePeople(localState?.people, remoteState?.people);
     people = people.map((person) => ({
       ...person,
@@ -308,6 +345,8 @@
     return {
       people,
       history,
+      historyMonths,
+      historyClearedAtMs,
       folders,
       activeFolderIds,
       activeFirstNames,
@@ -329,6 +368,7 @@
   window.FamilyMerge = {
     mergeStates,
     mergeHistory,
+    mergeHistoryMonths,
     mergePeople,
     mergeFolders,
     replayBalancesFromHistory,
