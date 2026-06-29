@@ -28,7 +28,7 @@ const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
-const APP_BUILD = "110";
+const APP_BUILD = "111";
 
 let coldAppLaunch = false;
 let cloudConfirmTimer = null;
@@ -947,6 +947,7 @@ function openAppDialog(dialog) {
       blurActiveInput();
       setTimeout(blurActiveInput, 0);
       setTimeout(blurActiveInput, 120);
+      pushAppBackHistory();
       return;
     }
   } catch (error) {
@@ -957,8 +958,82 @@ function openAppDialog(dialog) {
     blurActiveInput();
     setTimeout(blurActiveInput, 0);
     setTimeout(blurActiveInput, 120);
+    pushAppBackHistory();
   }
 }
+
+const APP_BACK_DIALOGS = [
+  elements?.operationDialog,
+  elements?.personDialog,
+  elements?.syncDialog,
+  elements?.deleteFolderDialog,
+  elements?.folderDialog,
+  elements?.botOfflineDialog,
+].filter(Boolean);
+
+let appBackStackDepth = 0;
+let suppressDialogBackSync = false;
+
+function pushAppBackHistory() {
+  try {
+    history.pushState({ fcBack: 1 }, "");
+    appBackStackDepth += 1;
+  } catch (error) {
+    // ignore
+  }
+}
+
+function popAppBackHistoryWithBrowser() {
+  if (appBackStackDepth <= 0) return;
+  try {
+    history.back();
+  } catch (error) {
+    appBackStackDepth = Math.max(0, appBackStackDepth - 1);
+  }
+}
+
+function closeAppDialog(dialog) {
+  if (!dialog || !dialog.open) return;
+  suppressDialogBackSync = true;
+  dialog.close();
+  suppressDialogBackSync = false;
+  if (appBackStackDepth > 0) {
+    popAppBackHistoryWithBrowser();
+  }
+}
+
+function closeTopAppDialog() {
+  for (const dialog of APP_BACK_DIALOGS) {
+    if (dialog && dialog.open) {
+      suppressDialogBackSync = true;
+      dialog.close();
+      suppressDialogBackSync = false;
+      return true;
+    }
+  }
+  return false;
+}
+
+function reconcileUiAfterSystemBack() {
+  blurActiveInput();
+  if (closeTopAppDialog()) return true;
+  if (activeView !== "main") {
+    activeView = "main";
+    updateViewMode();
+    return true;
+  }
+  return false;
+}
+
+function handleAppBackNavigation() {
+  if (!reconcileUiAfterSystemBack()) return false;
+  if (appBackStackDepth > 0) {
+    appBackStackDepth -= 1;
+  }
+  return true;
+}
+
+window.handleAppBackNavigation = handleAppBackNavigation;
 
 function isNetworkAvailable() {
   if (window.FamilySync?.isNetworkAvailable) {
@@ -1020,7 +1095,7 @@ function saveFamilyCode(event) {
     alert("Код семьи: минимум 4 буквы или цифры.");
     return;
   }
-  elements.syncDialog.close();
+  closeAppDialog(elements.syncDialog);
   startCloudSync();
   FamilySync.push(state);
   retryBotExportIfNeeded();
@@ -1069,7 +1144,7 @@ function bindEvents() {
   elements.detailsToggleButton.addEventListener("click", toggleDetailsView);
   elements.historyToggleButton.addEventListener("click", toggleHistoryView);
   bindSyncDialogOpen();
-  elements.cancelSyncButton.addEventListener("click", () => elements.syncDialog.close());
+  elements.cancelSyncButton.addEventListener("click", () => closeAppDialog(elements.syncDialog));
   elements.syncForm.addEventListener("submit", saveFamilyCode);
   elements.createFamilyCodeButton.addEventListener("click", () => {
     elements.familyCodeInput.value = FamilySync.createFamilyCode();
@@ -1080,13 +1155,13 @@ function bindEvents() {
   if (elements.clearCloudDataButton) {
     elements.clearCloudDataButton.addEventListener("click", () => wipeAllAppData({ pushToCloud: true }));
   }
-  elements.cancelPersonButton.addEventListener("click", () => elements.personDialog.close());
+  elements.cancelPersonButton.addEventListener("click", () => closeAppDialog(elements.personDialog));
   elements.personForm.addEventListener("submit", savePerson);
   elements.addFolderButton.addEventListener("click", openFolderDialog);
   elements.deleteFolderButton.addEventListener("click", openDeleteFolderDialog);
-  elements.cancelFolderButton.addEventListener("click", () => elements.folderDialog.close());
+  elements.cancelFolderButton.addEventListener("click", () => closeAppDialog(elements.folderDialog));
   elements.folderForm.addEventListener("submit", saveFolder);
-  elements.cancelDeleteFolderButton.addEventListener("click", () => elements.deleteFolderDialog.close());
+  elements.cancelDeleteFolderButton.addEventListener("click", () => closeAppDialog(elements.deleteFolderDialog));
   elements.deleteFolderForm.addEventListener("submit", deleteSelectedFolder);
   elements.folderList.addEventListener("click", handleFolderClick);
   elements.firstNameFilterList.addEventListener("click", handleFirstNameFilterClick);
@@ -1143,6 +1218,18 @@ function bindEvents() {
     event.preventDefault();
     deferredInstallPrompt = event;
     elements.installButton.hidden = false;
+  });
+
+  window.addEventListener("popstate", () => {
+    appBackStackDepth = Math.max(0, appBackStackDepth - 1);
+    reconcileUiAfterSystemBack();
+  });
+
+  APP_BACK_DIALOGS.forEach((dialog) => {
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeAppDialog(dialog);
+    });
   });
 }
 
@@ -1745,13 +1832,27 @@ function renderHistoryTotals() {
 }
 
 function toggleHistoryView() {
-  activeView = activeView === "history" ? "main" : "history";
+  if (activeView === "history") {
+    activeView = "main";
+    updateViewMode();
+    popAppBackHistoryWithBrowser();
+    return;
+  }
+  activeView = "history";
   updateViewMode();
+  pushAppBackHistory();
 }
 
 function toggleDetailsView() {
-  activeView = activeView === "details" ? "main" : "details";
+  if (activeView === "details") {
+    activeView = "main";
+    updateViewMode();
+    popAppBackHistoryWithBrowser();
+    return;
+  }
+  activeView = "details";
   updateViewMode();
+  pushAppBackHistory();
 }
 
 function updateViewMode() {
@@ -2147,7 +2248,7 @@ function saveFolder(event) {
     createdAt: Date.now(),
   });
   saveState();
-  elements.folderDialog.close();
+  closeAppDialog(elements.folderDialog);
   render();
 }
 
@@ -2173,7 +2274,7 @@ function deleteSelectedFolder(event) {
   if (!folder) return;
 
   if (deleteFolder(folder)) {
-    elements.deleteFolderDialog.close();
+    closeAppDialog(elements.deleteFolderDialog);
   }
 }
 
@@ -2495,7 +2596,7 @@ function savePerson(event) {
   activateFiltersForPerson(savedPerson, { isNew: !editingPersonId });
 
   saveState({ immediatePush: true });
-  elements.personDialog.close();
+  closeAppDialog(elements.personDialog);
   render();
 
   const saved = editingPersonId
@@ -2625,7 +2726,7 @@ function deleteEditingPerson() {
   if (!person) return;
 
   if (deletePerson(person)) {
-    elements.personDialog.close();
+    closeAppDialog(elements.personDialog);
   }
 }
 
@@ -2670,7 +2771,7 @@ function openOperationDialog(person, direction) {
 function closeOperationDialog() {
   currentOperation = null;
   amountChangeStack = [];
-  elements.operationDialog.close();
+  closeAppDialog(elements.operationDialog);
 }
 
 function addManualAmount() {
@@ -2758,7 +2859,7 @@ function confirmOperation(event) {
 
   saveState({ immediatePush: true });
   currentOperation = null;
-  elements.operationDialog.close();
+  closeAppDialog(elements.operationDialog);
   render();
 }
 
