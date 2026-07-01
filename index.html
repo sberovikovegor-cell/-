@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=180">
+    <link rel="stylesheet" href="./styles.css?v=182">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -234,62 +234,62 @@
 
           <div class="history-list" id="historyList"></div>
         </section>
+
+        <section class="card person-view" id="personView" hidden>
+          <form class="dialog-card person-view-form" id="personForm">
+            <h2 id="personDialogTitle">Добавить карту</h2>
+            <label>
+              Имя
+              <input id="personFirstNameInput" autocomplete="off" maxlength="32" placeholder="Например: Саня" required>
+            </label>
+            <label>
+              Фамилия
+              <input id="personLastNameInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
+            </label>
+            <label>
+              Начальная сумма
+              <input id="personBalanceInput" inputmode="decimal" placeholder="0">
+            </label>
+            <label>
+              Телефон
+              <input id="personPhoneInput" type="text" inputmode="text" autocomplete="off" maxlength="24" placeholder="Необязательно">
+            </label>
+            <label>
+              Номер карты
+              <input id="personCardNumberInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
+            </label>
+            <label>
+              Данные к карте
+              <input id="personCardDetailsInput" autocomplete="off" maxlength="128" placeholder="Банк, Сбер, Озон…">
+            </label>
+            <label>
+              Комментарий
+              <input id="personProfileNoteInput" autocomplete="off" maxlength="120" placeholder="Необязательно">
+            </label>
+            <div class="bank-theme-picker-block card-tint-picker-block">
+              <div class="bank-theme-picker card-tint-picker" id="personCardTintPicker" role="group" aria-label="Банк"></div>
+            </div>
+            <div class="folder-picker-block">
+              <span class="label">Папки</span>
+              <div class="folder-picker" id="personFolderPicker"></div>
+            </div>
+            <label class="checkbox-row">
+              <input type="checkbox" id="personUseInBotCheckbox">
+              Использовать в боте (умные переменные)
+            </label>
+            <p class="muted sync-hint person-bot-hint">Группа настраивается в админ-боте: 📱 Приложение. ID группы в приложении не нужен.</p>
+            <div class="dialog-actions">
+              <button class="ghost" type="button" id="cancelPersonButton">Отмена</button>
+              <button class="primary" type="submit">Сохранить</button>
+            </div>
+            <button class="danger person-delete-bottom" type="button" id="deletePersonButton" hidden>Удалить карту</button>
+            <div class="person-sync-code-block">
+              <button class="ghost mini" type="button" id="openSyncFromPersonButton">Код семьи</button>
+            </div>
+          </form>
+        </section>
       </main>
     </div>
-
-    <dialog id="personDialog">
-      <form method="dialog" class="dialog-card" id="personForm">
-        <h2 id="personDialogTitle">Добавить карту</h2>
-        <label>
-          Имя
-          <input id="personFirstNameInput" autocomplete="off" maxlength="32" placeholder="Например: Саня" required>
-        </label>
-        <label>
-          Фамилия
-          <input id="personLastNameInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
-        </label>
-        <label>
-          Начальная сумма
-          <input id="personBalanceInput" inputmode="decimal" placeholder="0">
-        </label>
-        <label>
-          Телефон
-          <input id="personPhoneInput" type="text" inputmode="text" autocomplete="off" maxlength="24" placeholder="Необязательно">
-        </label>
-        <label>
-          Номер карты
-          <input id="personCardNumberInput" autocomplete="off" maxlength="32" placeholder="Необязательно">
-        </label>
-        <label>
-          Данные к карте
-          <input id="personCardDetailsInput" autocomplete="off" maxlength="128" placeholder="Банк, Сбер, Озон…">
-        </label>
-        <label>
-          Комментарий
-          <input id="personProfileNoteInput" autocomplete="off" maxlength="120" placeholder="Необязательно">
-        </label>
-        <div class="bank-theme-picker-block card-tint-picker-block">
-          <div class="bank-theme-picker card-tint-picker" id="personCardTintPicker" role="group" aria-label="Банк"></div>
-        </div>
-        <div class="folder-picker-block">
-          <span class="label">Папки</span>
-          <div class="folder-picker" id="personFolderPicker"></div>
-        </div>
-        <label class="checkbox-row">
-          <input type="checkbox" id="personUseInBotCheckbox">
-          Использовать в боте (умные переменные)
-        </label>
-        <p class="muted sync-hint person-bot-hint">Группа настраивается в админ-боте: 📱 Приложение. ID группы в приложении не нужен.</p>
-        <div class="dialog-actions">
-          <button class="ghost" value="cancel" type="button" id="cancelPersonButton">Отмена</button>
-          <button class="primary" value="default">Сохранить</button>
-        </div>
-        <button class="danger person-delete-bottom" type="button" id="deletePersonButton" hidden>Удалить карту</button>
-        <div class="person-sync-code-block">
-          <button class="ghost mini" type="button" id="openSyncFromPersonButton">Код семьи</button>
-        </div>
-      </form>
-    </dialog>
 
     <dialog id="folderDialog">
       <form method="dialog" class="dialog-card" id="folderForm">
@@ -428,8 +428,8 @@
         </div>
 
         <div id="bulkStepInput">
-          <p class="muted sync-hint">Каждая строка: имя (примерно) и сумма в конце. Enter — новая строка.<br>Например: <b>виктор цуп 367</b></p>
-          <textarea id="bulkListInput" class="bulk-textarea" rows="7" placeholder="виктор цуп 367&#10;викт озон 899&#10;люд тиньк 6000" autocomplete="off"></textarea>
+          <p class="muted sync-hint">Каждая строка: имя (примерно), сумма, и можно комментарий после суммы. Enter — новая строка.<br>Например: <b>виктор цуп 1000 магнит</b></p>
+          <textarea id="bulkListInput" class="bulk-textarea" rows="7" placeholder="виктор цуп 1000 магнит&#10;викт озон 899&#10;люд тиньк 6000 подарок" autocomplete="off"></textarea>
           <div class="dialog-actions">
             <button class="ghost" type="button" id="bulkCancelButton2">Выйти</button>
             <button class="primary" type="button" id="bulkRecognizeButton">Распознать</button>
@@ -512,14 +512,14 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=180" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=180" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=180" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=180" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=180" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=180" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=180" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=180" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=180" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=182" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=182" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=182" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=182" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=182" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=182" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=182" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=182" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=182" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
