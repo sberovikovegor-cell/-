@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=182">
+    <link rel="stylesheet" href="./styles.css?v=184">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -277,14 +277,44 @@
               <input type="checkbox" id="personUseInBotCheckbox">
               Использовать в боте (умные переменные)
             </label>
-            <p class="muted sync-hint person-bot-hint">Группа настраивается в админ-боте: 📱 Приложение. ID группы в приложении не нужен.</p>
             <div class="dialog-actions">
               <button class="ghost" type="button" id="cancelPersonButton">Отмена</button>
               <button class="primary" type="submit">Сохранить</button>
             </div>
             <button class="danger person-delete-bottom" type="button" id="deletePersonButton" hidden>Удалить карту</button>
-            <div class="person-sync-code-block">
-              <button class="ghost mini" type="button" id="openSyncFromPersonButton">Код семьи</button>
+          </form>
+        </section>
+
+        <section class="card bulk-view" id="bulkListView" hidden>
+          <form class="dialog-card bulk-view-form" id="bulkListForm">
+            <div class="section-title">
+              <div>
+                <span class="label">Списком</span>
+                <h2>Добавить список</h2>
+              </div>
+              <button class="ghost" type="button" id="cancelBulkListButton">Выйти</button>
+            </div>
+
+            <div id="bulkStepInput">
+              <p class="muted sync-hint">Каждая строка: имя (примерно), сумма, и можно комментарий после суммы. Enter — новая строка.<br>Например: <b>виктор цуп 1000 магнит</b></p>
+              <textarea id="bulkListInput" class="bulk-textarea" rows="7" placeholder="виктор цуп 1000 магнит&#10;викт озон 899&#10;люд тиньк 6000 подарок" autocomplete="off"></textarea>
+              <div class="dialog-actions">
+                <button class="ghost" type="button" id="bulkCancelButton2">Выйти</button>
+                <button class="primary" type="button" id="bulkRecognizeButton">Распознать</button>
+              </div>
+            </div>
+
+            <div id="bulkStepMatch" hidden>
+              <p class="muted sync-hint" id="bulkMatchHint">Отметьте нужного человека в каждой строке, затем выберите тип операции.</p>
+              <div class="bulk-match-list" id="bulkMatchList"></div>
+              <div class="operation-action-grid" id="bulkTypeGrid">
+                <button type="button" class="op-action op-purchase" data-htype="purchase">Покупка</button>
+                <button type="button" class="op-action op-transfer" data-htype="transfer">Перевод</button>
+                <button type="button" class="op-action op-income" data-htype="income">Пополнение</button>
+              </div>
+              <div class="dialog-actions">
+                <button class="ghost" type="button" id="bulkBackButton">Назад</button>
+              </div>
             </div>
           </form>
         </section>
@@ -321,10 +351,11 @@
 
     <dialog id="operationDialog">
       <form method="dialog" class="dialog-card operation-dialog" id="operationForm">
-        <div class="section-title">
-          <div>
-            <span class="label" id="operationPerson">Имя</span>
-            <h2 id="operationTitle">Операция</h2>
+        <div class="section-title operation-head">
+          <div class="operation-head-main">
+            <span class="operation-balance-value" id="operationTitle">0</span>
+            <h2 class="operation-person-name" id="operationPerson">Имя</h2>
+            <div class="operation-stats-line person-stats-line" id="operationStatsTop"></div>
           </div>
           <button class="ghost" type="button" id="cancelOperationButton">Выйти</button>
         </div>
@@ -357,6 +388,7 @@
           <button class="ghost" type="button" id="exitOperationButton">Выйти</button>
           <button class="danger" type="button" id="resetAmountButton">Сбросить</button>
         </div>
+        <div class="operation-stats-line person-stats-line operation-stats-bottom" id="operationStatsBottom"></div>
         <input type="checkbox" id="transferCheckbox" hidden>
         <button type="submit" id="confirmOperationButton" hidden aria-hidden="true"></button>
       </form>
@@ -417,41 +449,7 @@
       </form>
     </dialog>
 
-    <dialog id="bulkListDialog">
-      <form method="dialog" class="dialog-card bulk-dialog" id="bulkListForm">
-        <div class="section-title">
-          <div>
-            <span class="label">Списком</span>
-            <h2>Добавить список</h2>
-          </div>
-          <button class="ghost" type="button" id="cancelBulkListButton">Выйти</button>
-        </div>
-
-        <div id="bulkStepInput">
-          <p class="muted sync-hint">Каждая строка: имя (примерно), сумма, и можно комментарий после суммы. Enter — новая строка.<br>Например: <b>виктор цуп 1000 магнит</b></p>
-          <textarea id="bulkListInput" class="bulk-textarea" rows="7" placeholder="виктор цуп 1000 магнит&#10;викт озон 899&#10;люд тиньк 6000 подарок" autocomplete="off"></textarea>
-          <div class="dialog-actions">
-            <button class="ghost" type="button" id="bulkCancelButton2">Выйти</button>
-            <button class="primary" type="button" id="bulkRecognizeButton">Распознать</button>
-          </div>
-        </div>
-
-        <div id="bulkStepMatch" hidden>
-          <p class="muted sync-hint" id="bulkMatchHint">Отметьте нужного человека в каждой строке, затем выберите тип операции.</p>
-          <div class="bulk-match-list" id="bulkMatchList"></div>
-          <div class="operation-action-grid" id="bulkTypeGrid">
-            <button type="button" class="op-action op-purchase" data-htype="purchase">Покупка</button>
-            <button type="button" class="op-action op-transfer" data-htype="transfer">Перевод</button>
-            <button type="button" class="op-action op-income" data-htype="income">Пополнение</button>
-          </div>
-          <div class="dialog-actions">
-            <button class="ghost" type="button" id="bulkBackButton">Назад</button>
-          </div>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="syncDialog">
+    <dialog id="syncDialog" hidden aria-hidden="true">
       <form method="dialog" class="dialog-card" id="syncForm">
         <h2>Синхронизация</h2>
         <p class="muted sync-hint" id="syncModeHint">Синхронизация через Telegram. Телефон и сайт на ПК связаны только через канал — один код семьи и запущенный main.py на компьютере.</p>
@@ -512,14 +510,14 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=182" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=182" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=182" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=182" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=182" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=182" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=182" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=182" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=182" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=184" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=184" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=184" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=184" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=184" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=184" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=184" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=184" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=184" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
