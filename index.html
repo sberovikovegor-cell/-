@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=178">
+    <link rel="stylesheet" href="./styles.css?v=179">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -63,6 +63,16 @@
     <div class="sync-alert-banner bot-notice-legacy" id="syncAlertBanner" hidden aria-hidden="true"></div>
     <div class="app">
       <main>
+        <section class="card top-actions-bar">
+          <div class="top-actions-grid">
+            <button class="ghost compact" type="button" id="detailsToggleButton">Подробней</button>
+            <button class="ghost compact" type="button" id="historyToggleButton">История</button>
+            <button class="ghost compact" type="button" id="homeButton">Главное меню</button>
+            <button class="primary compact" type="button" id="addPersonButton">+ Карта</button>
+            <button class="ghost compact" type="button" id="addListButton">+ Список</button>
+          </div>
+        </section>
+
         <section class="card top-bar">
           <div class="top-bar-row">
             <div class="top-metric">
@@ -80,12 +90,6 @@
               <strong id="familyTransferTotal" class="transfer">0</strong>
               <button type="button" class="top-subtotal day-link transfer" id="familyTransferToday" data-day-metric="transfer">сегодня 0</button>
             </div>
-            <div class="top-bar-actions">
-              <button class="ghost compact" type="button" id="detailsToggleButton">Подробней</button>
-              <button class="ghost compact" type="button" id="historyToggleButton">История</button>
-              <button class="ghost compact" type="button" id="addListButton">+ Список</button>
-              <button class="primary compact" type="button" id="addPersonButton">+ Карта</button>
-            </div>
           </div>
           <div class="sync-row">
             <div class="sync-notice-row" id="syncNoticeRow" hidden>
@@ -99,23 +103,6 @@
         </section>
 
         <div id="mainView">
-        <section class="card stats-card stats-card-top">
-          <div class="stats-grid">
-            <div>
-              <span class="stats-label">Пополнений</span>
-              <strong id="incomeCount">0</strong>
-            </div>
-            <div>
-              <span class="stats-label">Покупок</span>
-              <strong id="purchaseCount">0</strong>
-            </div>
-            <div>
-              <span class="stats-label">Переводов</span>
-              <strong id="transferCount">0</strong>
-            </div>
-          </div>
-        </section>
-
         <section class="card folder-card">
           <div class="banks-bar">
             <span class="inline-label">Банки</span>
@@ -523,14 +510,14 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=178" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=178" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=178" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=178" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=178" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=178" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=178" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=178" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=178" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=179" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=179" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=179" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=179" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=179" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=179" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=179" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=179" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=179" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
