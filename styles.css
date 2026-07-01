@@ -2182,14 +2182,34 @@ body {
 
 /* --- v172 --- */
 
-.top-bar {
+.top-actions-bar {
   position: sticky;
   top: 0;
-  z-index: 60;
+  z-index: 70;
+  margin-bottom: 8px;
+  padding: 8px 10px;
 }
 
-body:not(.android-webview) .top-bar {
+body:not(.android-webview) .top-actions-bar {
   top: env(safe-area-inset-top, 0px);
+}
+
+.top-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+
+.top-actions-grid button {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 2px;
+  font-size: 0.62rem;
+  line-height: 1.05;
+  white-space: normal;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-num.ok {
