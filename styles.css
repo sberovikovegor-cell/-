@@ -835,7 +835,7 @@ body.person-reorder-lock {
   overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 5px;
 }
 
 .money-chip {
@@ -875,8 +875,7 @@ body.person-reorder-lock {
   text-decoration: none;
   text-align: left;
   justify-content: flex-start;
-  /* базовые 8px + ~1 пробел от края фона, слот не сдвигается */
-  padding: 5px 8px 5px calc(8px + 0.32em);
+  padding: 5px 8px 5px calc(8px + 0.16em);
 }
 
 .money-chip:active {
@@ -965,32 +964,15 @@ body.person-reorder-lock {
 .person-card-top .person-line-stats {
   grid-column: 1 / -1;
   grid-row: 3;
-  display: grid;
-  grid-template-columns: minmax(42%, 1fr) minmax(0, 46%);
-  column-gap: 8px;
-  align-items: center;
   width: 100%;
   min-width: 0;
   margin-top: 2px;
 }
 
 .person-stats-main {
-  grid-column: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
-}
-
-.person-stats-xfer-slot {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 1.1em;
-}
-
-.person-stats-xfer-slot .xfer-indicator {
-  font-size: 0.82rem;
-  min-width: 1.4em;
 }
 
 .person-card-top .person-top-actions .mini {
@@ -1108,6 +1090,23 @@ body.person-reorder-lock {
   line-height: 1.35;
 }
 
+.person-stats-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.person-stats-body {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
+}
+
 .person-stats-wrap {
   display: flex;
   align-items: center;
@@ -1119,21 +1118,25 @@ body.person-reorder-lock {
 .person-stats-text {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
 }
 
 .xfer-indicator {
   flex-shrink: 0;
-  min-width: 1.1em;
-  padding: 0 2px;
+  min-width: 1.2em;
+  padding: 0 1px;
+  margin-left: 2px;
   border: none;
   background: transparent;
   font: inherit;
+  font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
   text-align: right;
+  align-self: flex-end;
+  line-height: 1.2;
 }
 
 .xfer-indicator.xfer-ok {
@@ -1176,9 +1179,9 @@ body.person-reorder-lock {
 }
 
 .month-spend-indicator {
-  flex-shrink: 0;
-  min-width: 3.2rem;
-  padding: 0 3px;
+  display: inline;
+  padding: 0 2px;
+  margin-left: 3px;
   border: none;
   background: transparent;
   font: inherit;
@@ -1186,7 +1189,8 @@ body.person-reorder-lock {
   font-variant-numeric: tabular-nums;
   color: rgba(169, 180, 199, 0.88);
   cursor: pointer;
-  text-align: right;
+  vertical-align: baseline;
+  white-space: nowrap;
 }
 
 .month-spend-indicator:active {
