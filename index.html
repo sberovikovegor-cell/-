@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=184">
+    <link rel="stylesheet" href="./styles.css?v=185">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -78,17 +78,17 @@
             <div class="top-metric">
               <span class="top-label">Баланс</span>
               <strong id="familyTotal">0</strong>
-              <button type="button" class="top-subtotal day-link income" id="familyIncomeToday" data-day-metric="income">сегодня 0</button>
+              <button type="button" class="top-subtotal day-link income" id="familyIncomeToday" data-day-metric="income">0 0</button>
             </div>
             <div class="top-metric">
               <span class="top-label">Траты</span>
               <strong id="familyPurchaseTotal" class="purchase">0</strong>
-              <button type="button" class="top-subtotal day-link" id="familyPurchaseToday" data-day-metric="purchase">сегодня 0</button>
+              <button type="button" class="top-subtotal day-link" id="familyPurchaseToday" data-day-metric="purchase">0 0</button>
             </div>
             <div class="top-metric">
               <span class="top-label">Переводы</span>
               <strong id="familyTransferTotal" class="transfer">0</strong>
-              <button type="button" class="top-subtotal day-link transfer" id="familyTransferToday" data-day-metric="transfer">сегодня 0</button>
+              <button type="button" class="top-subtotal day-link transfer" id="familyTransferToday" data-day-metric="transfer">0 0</button>
             </div>
           </div>
           <div class="sync-row">
@@ -96,6 +96,7 @@
               <span id="syncNoticeText"></span>
             </div>
             <div class="sync-actions-row">
+              <span class="last-db-change" id="lastDbChange"></span>
               <span class="sync-status" id="syncStatus" data-status="local">Только этот телефон</span>
               <span class="app-version" id="appVersion"></span>
             </div>
@@ -111,7 +112,9 @@
               <option value="balance-desc">Крупный баланс</option>
               <option value="balance-asc">Мелкий баланс</option>
               <option value="purchases-all">Больше покупок (всего)</option>
+              <option value="purchases-all-asc">Меньше покупок (всего)</option>
               <option value="purchases-since">Больше покупок с пополнения</option>
+              <option value="purchases-since-asc">Меньше покупок с пополнения</option>
             </select>
             <button class="ghost mini all-filters-toggle" type="button" id="allFiltersToggle" aria-expanded="false">все фильтры ▾</button>
             <span class="single-filter-text">1 фильтр</span>
@@ -353,8 +356,8 @@
       <form method="dialog" class="dialog-card operation-dialog" id="operationForm">
         <div class="section-title operation-head">
           <div class="operation-head-main">
-            <span class="operation-balance-value" id="operationTitle">0</span>
             <h2 class="operation-person-name" id="operationPerson">Имя</h2>
+            <span class="operation-balance-value" id="operationTitle">0</span>
             <div class="operation-stats-line person-stats-line" id="operationStatsTop"></div>
           </div>
           <button class="ghost" type="button" id="cancelOperationButton">Выйти</button>
@@ -388,7 +391,6 @@
           <button class="ghost" type="button" id="exitOperationButton">Выйти</button>
           <button class="danger" type="button" id="resetAmountButton">Сбросить</button>
         </div>
-        <div class="operation-stats-line person-stats-line operation-stats-bottom" id="operationStatsBottom"></div>
         <input type="checkbox" id="transferCheckbox" hidden>
         <button type="submit" id="confirmOperationButton" hidden aria-hidden="true"></button>
       </form>
@@ -433,6 +435,32 @@
           <button class="danger" type="button" id="deleteHistoryEditButton">Удалить</button>
           <button class="primary" type="button" id="saveHistoryEditButton">Сохранить</button>
         </div>
+      </form>
+    </dialog>
+
+    <dialog id="personHistoryDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="section-title">
+          <div>
+            <span class="label">Операции</span>
+            <h2 id="personHistoryTitle">История</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelPersonHistoryButton">Закрыть</button>
+        </div>
+        <div class="person-history-list" id="personHistoryList"></div>
+      </form>
+    </dialog>
+
+    <dialog id="xferTimelineDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="section-title">
+          <div>
+            <span class="label">С последнего пополнения</span>
+            <h2 id="xferTimelineTitle">Цепочка операций</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelXferTimelineButton">Закрыть</button>
+        </div>
+        <pre class="xfer-timeline-content" id="xferTimelineContent"></pre>
       </form>
     </dialog>
 
@@ -510,14 +538,15 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=184" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=184" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=184" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=184" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=184" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=184" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=184" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=184" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=184" defer onerror="window.__scriptFailed('app.js')"></script>
+    <button type="button" class="device-name-footer" id="deviceNameFooter" aria-label="Название устройства"></button>
+    <script src="server-config.js?v=185" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=185" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=185" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=185" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=185" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=185" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=185" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=185" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=185" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
