@@ -681,21 +681,8 @@ body.person-reorder-lock {
   justify-content: center;
 }
 
-.person-line-balance .person-balance {
-  flex-shrink: 0;
-}
-
 .person-line-balance .row-sep {
   flex-shrink: 0;
-}
-
-.person-line-balance .last-income {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .person-line-balance .bot-toggle {
@@ -846,6 +833,68 @@ body.person-reorder-lock {
   flex-wrap: nowrap;
   min-width: 0;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.money-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 5.75rem;
+  min-width: 5.75rem;
+  max-width: 5.75rem;
+  min-height: 2rem;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(22, 33, 62, 0.42);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.money-chip.last-income {
+  min-height: auto;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: rgba(169, 180, 199, 0.9);
+}
+
+.person-balance.money-chip {
+  text-decoration: none;
+  text-align: left;
+  justify-content: flex-start;
+  /* базовые 8px + ~1 пробел от края фона, слот не сдвигается */
+  padding: 5px 8px 5px calc(8px + 0.32em);
+}
+
+.money-chip:active {
+  opacity: 0.82;
+}
+
+.person-line-balance .person-balance {
+  flex-shrink: 0;
+}
+
+.person-line-balance .last-income {
+  flex: 0 0 auto;
+  min-width: 5.75rem;
+  max-width: 5.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .person-money-row {
@@ -873,7 +922,7 @@ body.person-reorder-lock {
 .person-card-top {
   display: grid;
   grid-template-columns: minmax(42%, 1fr) minmax(0, 46%);
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   column-gap: 8px;
   row-gap: 2px;
   align-items: stretch;
@@ -911,6 +960,37 @@ body.person-reorder-lock {
   width: 100%;
   min-width: 0;
   max-width: 100%;
+}
+
+.person-card-top .person-line-stats {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: minmax(42%, 1fr) minmax(0, 46%);
+  column-gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.person-stats-main {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.person-stats-xfer-slot {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 1.1em;
+}
+
+.person-stats-xfer-slot .xfer-indicator {
+  font-size: 0.82rem;
+  min-width: 1.4em;
 }
 
 .person-card-top .person-top-actions .mini {
@@ -1001,8 +1081,8 @@ body.person-reorder-lock {
 }
 
 .person-balance {
-  font-size: 1.18rem;
-  font-weight: 900;
+  font-size: 1.02rem;
+  font-weight: 800;
   color: var(--text);
   line-height: 1.1;
 }
@@ -1012,7 +1092,7 @@ body.person-reorder-lock {
   font-size: 0.7rem;
 }
 
-.last-income {
+.last-income:not(.money-chip) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1024,7 +1104,7 @@ body.person-reorder-lock {
   display: block;
   width: 100%;
   min-width: 0;
-  font-size: 0.58rem;
+  font-size: 0.65rem;
   line-height: 1.35;
 }
 
@@ -1066,6 +1146,62 @@ body.person-reorder-lock {
 
 .xfer-indicator.xfer-bad {
   color: #ff6b6b;
+}
+
+.xfer-indicator-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-width: 1.6em;
+}
+
+.xfer-indicator-pair .xfer-sep {
+  color: rgba(169, 180, 199, 0.55);
+  padding: 0 1px;
+}
+
+.xfer-indicator-pair .xfer-ok,
+.xfer-indicator .xfer-ok {
+  color: #8be9a8;
+}
+
+.xfer-indicator-pair .xfer-warn,
+.xfer-indicator .xfer-warn {
+  color: #ffd166;
+}
+
+.xfer-indicator-pair .xfer-bad,
+.xfer-indicator .xfer-bad {
+  color: #ff6b6b;
+}
+
+.month-spend-indicator {
+  flex-shrink: 0;
+  min-width: 3.2rem;
+  padding: 0 3px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(169, 180, 199, 0.88);
+  cursor: pointer;
+  text-align: right;
+}
+
+.month-spend-indicator:active {
+  opacity: 0.75;
+}
+
+.person-mini-hint {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.person-mini-dialog .person-history-list {
+  max-height: min(55vh, 420px);
 }
 
 .mini {
@@ -1864,17 +2000,27 @@ body {
 
 .person-balance {
   border: 0;
-  background: transparent;
-  color: var(--text);
   font-family: inherit;
-  font-size: 1.18rem;
-  font-weight: 900;
   cursor: pointer;
   padding: 0;
+}
+
+.person-balance:not(.money-chip) {
+  background: transparent;
+  color: var(--text);
+  font-size: 1.18rem;
+  font-weight: 900;
   text-align: left;
   text-decoration: underline;
   text-decoration-color: rgba(159, 212, 255, 0.4);
   text-underline-offset: 3px;
+}
+
+.last-income.money-chip {
+  text-decoration: none;
+  text-align: left;
+  justify-content: flex-start;
+  box-shadow: none;
 }
 
 .person-balance:active {
