@@ -154,8 +154,15 @@
     const code = getFamilyCode();
     const secret = getSyncSecret();
     const bytes = base64ToBytes(node.payload);
-    const data = await window.FamilyTelegramCrypto.decryptJson(code, secret, bytes);
-    return { state: data.state, revision: Number(node.revision || data.revision || 0) };
+    try {
+      const data = await window.FamilyTelegramCrypto.decryptJson(code, secret, bytes);
+      return { state: data.state, revision: Number(node.revision || data.revision || 0) };
+    } catch (error) {
+      // Не смогли расшифровать = другой код семьи или секрет на этом устройстве.
+      const err = new Error("Секрет/код не совпадает с облаком");
+      err.code = "secret-mismatch";
+      throw err;
+    }
   }
 
   // ── сеть ──
@@ -260,6 +267,8 @@
         }
       }
     } catch (error) {
+      // Если не расшифровали чужие данные — НЕ затираем их своими.
+      if (error?.code === "secret-mismatch") throw error;
       console.warn("firebase merge before push", error);
     }
     if (stateToPush && typeof window.sanitizeStateForCloud === "function") {
