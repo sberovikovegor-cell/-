@@ -29,7 +29,7 @@ const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "179";
+const APP_BUILD = "180";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -306,6 +306,8 @@ const elements = {
   addFolderButton: document.querySelector("#addFolderButton"),
   deleteFolderButton: document.querySelector("#deleteFolderButton"),
   singleFilterToggle: document.querySelector("#singleFilterToggle"),
+  allFiltersToggle: document.querySelector("#allFiltersToggle"),
+  allFiltersPanel: document.querySelector("#allFiltersPanel"),
   incomeCount: document.querySelector("#incomeCount"),
   purchaseCount: document.querySelector("#purchaseCount"),
   transferCount: document.querySelector("#transferCount"),
@@ -1369,6 +1371,9 @@ function bindEvents() {
   elements.folderList.addEventListener("click", handleFolderClick);
   elements.firstNameFilterList.addEventListener("click", handleFirstNameFilterClick);
   elements.singleFilterToggle.addEventListener("click", toggleSingleFilterMode);
+  if (elements.allFiltersToggle && elements.allFiltersPanel) {
+    elements.allFiltersToggle.addEventListener("click", toggleAllFiltersPanel);
+  }
   elements.deletePersonButton.addEventListener("click", deleteEditingPerson);
   if (elements.openSyncFromPersonButton) {
     elements.openSyncFromPersonButton.addEventListener("click", openSyncDialog);
@@ -2422,10 +2427,11 @@ function updateViewMode() {
   elements.mainView.hidden = activeView !== "main";
   elements.detailsView.hidden = activeView !== "details";
   elements.historyView.hidden = activeView !== "history";
-  elements.historyToggleButton.textContent = activeView === "history" ? "Назад" : "История";
   elements.historyToggleButton.classList.toggle("active", activeView === "history");
-  elements.detailsToggleButton.textContent = activeView === "details" ? "Назад" : "Подробней";
   elements.detailsToggleButton.classList.toggle("active", activeView === "details");
+  if (elements.homeButton) {
+    elements.homeButton.classList.toggle("active", activeView === "main");
+  }
   if (activeView === "history") {
     renderHistory();
   }
@@ -3066,6 +3072,15 @@ function toggleSingleFilterMode() {
   state.uiUpdatedAt = Date.now();
   saveState();
   renderSingleFilterToggle();
+}
+
+function toggleAllFiltersPanel() {
+  if (!elements.allFiltersPanel || !elements.allFiltersToggle) return;
+  const open = elements.allFiltersPanel.hidden;
+  elements.allFiltersPanel.hidden = !open;
+  elements.allFiltersToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  elements.allFiltersToggle.textContent = open ? "все фильтры ▴" : "все фильтры ▾";
+  elements.allFiltersToggle.classList.toggle("active", open);
 }
 
 function handleFolderClick(event) {
