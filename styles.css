@@ -2286,30 +2286,47 @@ body:not(.android-webview) .top-actions-bar {
   grid-template-columns: auto minmax(0, 1fr);
 }
 
-/* «+ Карта» как полноценная страница на весь экран */
-#personDialog[open] {
-  top: 0;
-  left: 0;
-  transform: none;
+/* Список: разделительная полоса между строками и комментарий */
+.bulk-match-list .bulk-line + .bulk-line {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 
-#personDialog {
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  max-height: 100%;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--bg);
+.bulk-line-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
-#personDialog .dialog-card {
-  width: min(100%, 760px);
-  margin: 0 auto;
-  min-height: 100%;
-  max-height: 100%;
-  overflow-y: auto;
-  padding: 18px 16px 40px;
-  align-content: start;
+/* Подсказка «Нажмите ещё раз для выхода» */
+.app-exit-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(10px);
+  z-index: 12000;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(20, 28, 48, 0.92);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.app-exit-hint.show {
+  opacity: 0.92;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* «+ Карта» как полноценная страница (вид), а не всплывающее окно */
+.person-view {
+  padding: 14px 12px 28px;
+}
+
+.person-view-form {
+  padding: 0;
 }
