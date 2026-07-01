@@ -1,4 +1,4 @@
-const CACHE_NAME = "family-counter-cache-v168";
+const CACHE_NAME = "family-counter-cache-v178";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,8 @@ const ASSETS = [
   "./sync.js",
   "./sync-merge.js",
   "./sync-telegram.js",
+  "./sync-firebase.js",
+  "./firebase-config.js",
   "./server-config.js",
   "./telegram-config.js",
   "./telegram-crypto.js",
@@ -46,6 +48,10 @@ self.addEventListener("fetch", (event) => {
   if (url.includes("/tg-proxy/") || url.includes("api.telegram.org")) return;
   if (event.request.method !== "GET") return;
 
+  // Кэш ищем без учёта ?v=… (в precache файлы лежат без query).
+  const matchCached = () =>
+    caches.match(event.request, { ignoreSearch: true });
+
   if (shouldUseNetworkFirst(event.request)) {
     event.respondWith(
       fetch(event.request)
@@ -53,16 +59,18 @@ self.addEventListener("fetch", (event) => {
           if (response.ok) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+            return response;
           }
-          return response;
+          // 404/500 и т.п. — пробуем отдать из кэша, чтобы не падал запуск.
+          return matchCached().then((cached) => cached || response);
         })
-        .catch(() => caches.match(event.request))
+        .catch(() => matchCached())
     );
     return;
   }
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    matchCached().then((cached) => {
       return cached || fetch(event.request).then((response) => {
         if (response.ok) {
           const copy = response.clone();
