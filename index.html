@@ -2,14 +2,14 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#16213e">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=168">
+    <link rel="stylesheet" href="./styles.css?v=178">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -68,18 +68,22 @@
             <div class="top-metric">
               <span class="top-label">Баланс</span>
               <strong id="familyTotal">0</strong>
+              <button type="button" class="top-subtotal day-link income" id="familyIncomeToday" data-day-metric="income">сегодня 0</button>
             </div>
             <div class="top-metric">
               <span class="top-label">Траты</span>
               <strong id="familyPurchaseTotal" class="purchase">0</strong>
+              <button type="button" class="top-subtotal day-link" id="familyPurchaseToday" data-day-metric="purchase">сегодня 0</button>
             </div>
             <div class="top-metric">
               <span class="top-label">Переводы</span>
               <strong id="familyTransferTotal" class="transfer">0</strong>
+              <button type="button" class="top-subtotal day-link transfer" id="familyTransferToday" data-day-metric="transfer">сегодня 0</button>
             </div>
             <div class="top-bar-actions">
               <button class="ghost compact" type="button" id="detailsToggleButton">Подробней</button>
               <button class="ghost compact" type="button" id="historyToggleButton">История</button>
+              <button class="ghost compact" type="button" id="addListButton">+ Список</button>
               <button class="primary compact" type="button" id="addPersonButton">+ Карта</button>
             </div>
           </div>
@@ -91,7 +95,6 @@
               <span class="sync-status" id="syncStatus" data-status="local">Только этот телефон</span>
               <span class="app-version" id="appVersion"></span>
             </div>
-            <button class="ghost mini sync-code-button" type="button" id="openSyncDialogButton">Код семьи</button>
           </div>
         </section>
 
@@ -128,6 +131,23 @@
             <span class="inline-label">Имена</span>
             <div class="folder-list" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
           </div>
+          <div class="people-controls">
+            <div class="people-balance-filter">
+              <span class="inline-label">Баланс</span>
+              <input id="balanceMinInput" type="number" inputmode="numeric" step="100" placeholder="от" aria-label="Баланс от">
+              <input id="balanceMaxInput" type="number" inputmode="numeric" step="100" placeholder="до" aria-label="Баланс до">
+            </div>
+            <div class="people-sort">
+              <span class="inline-label">Сорт.</span>
+              <select id="peopleSortSelect" aria-label="Сортировка людей">
+                <option value="manual">Свой порядок</option>
+                <option value="balance-desc">Крупный баланс</option>
+                <option value="balance-asc">Мелкий баланс</option>
+                <option value="purchases-all">Больше покупок (всего)</option>
+                <option value="purchases-since">Больше покупок с пополнения</option>
+              </select>
+            </div>
+          </div>
         </section>
 
         <section class="people" id="peopleList" aria-label="Список людей"></section>
@@ -160,39 +180,67 @@
               <h2>Все операции</h2>
             </div>
             <div class="history-actions">
+              <button class="ghost" type="button" id="historyDetailsToggle">Подробнее</button>
+            </div>
+          </div>
+
+          <div id="historyControls" hidden>
+            <div class="history-actions history-actions-secondary">
               <select id="historyPeriodSelect" class="history-period-select" aria-label="Период истории">
                 <option value="current">Текущий период</option>
               </select>
               <button class="ghost" type="button" id="nextMonthButton">След. месяц</button>
               <button class="ghost" type="button" id="clearHistoryButton">Очистить</button>
             </div>
-          </div>
 
-          <div class="filters">
-            <select id="personFilter" aria-label="Фильтр по имени"></select>
-            <select id="typeFilter" aria-label="Фильтр по разделу">
-              <option value="all">Все разделы</option>
-              <option value="income">Пополнения</option>
-              <option value="purchase">Покупки</option>
-              <option value="transfer">Переводы</option>
-            </select>
-          </div>
-          <label class="history-comment-filter">
-            <span class="label">Поиск по комментарию</span>
-            <input
-              id="commentFilter"
-              type="search"
-              aria-label="Поиск по комментарию"
-              placeholder="Например: Магазин"
-              autocomplete="off"
-            >
-          </label>
+            <div class="filters">
+              <select id="personFilter" aria-label="Фильтр по имени"></select>
+              <select id="typeFilter" aria-label="Фильтр по разделу">
+                <option value="all">Все разделы</option>
+                <option value="income">Пополнения</option>
+                <option value="purchase">Покупки</option>
+                <option value="transfer">Переводы</option>
+              </select>
+            </div>
+            <label class="history-comment-filter">
+              <span class="label">Поиск по комментарию</span>
+              <input
+                id="commentFilter"
+                type="search"
+                aria-label="Поиск по комментарию"
+                placeholder="Например: Магазин"
+                autocomplete="off"
+              >
+            </label>
+            <div class="history-date-filter">
+              <label>
+                <span class="label">С даты</span>
+                <input id="historyDateFrom" type="date" aria-label="История с даты">
+              </label>
+              <label>
+                <span class="label">По дату</span>
+                <input id="historyDateTo" type="date" aria-label="История по дату">
+              </label>
+              <button class="ghost mini" type="button" id="historyDateReset" aria-label="Сбросить даты">Сброс</button>
+            </div>
+            <div class="history-amount-filter">
+              <label>
+                <span class="label">Сумма от</span>
+                <input id="historyAmountFrom" type="number" inputmode="decimal" placeholder="от" aria-label="Сумма от">
+              </label>
+              <label>
+                <span class="label">до</span>
+                <input id="historyAmountTo" type="number" inputmode="decimal" placeholder="до" aria-label="Сумма до">
+              </label>
+              <button class="ghost mini" type="button" id="historyAmountReset" aria-label="Сбросить суммы">Сброс</button>
+            </div>
 
-          <div class="tabs" role="tablist" aria-label="Быстрый фильтр истории">
-            <button class="tab active" data-type="all">Все</button>
-            <button class="tab" data-type="income">Пополнения</button>
-            <button class="tab" data-type="purchase">Покупки</button>
-            <button class="tab" data-type="transfer">Переводы</button>
+            <div class="tabs" role="tablist" aria-label="Быстрый фильтр истории">
+              <button class="tab active" data-type="all">Все</button>
+              <button class="tab" data-type="income">Пополнения</button>
+              <button class="tab" data-type="purchase">Покупки</button>
+              <button class="tab" data-type="transfer">Переводы</button>
+            </div>
           </div>
 
           <div class="history-list" id="historyList"></div>
@@ -248,6 +296,9 @@
           <button class="primary" value="default">Сохранить</button>
         </div>
         <button class="danger person-delete-bottom" type="button" id="deletePersonButton" hidden>Удалить карту</button>
+        <div class="person-sync-code-block">
+          <button class="ghost mini" type="button" id="openSyncFromPersonButton">Код семьи</button>
+        </div>
       </form>
     </dialog>
 
@@ -290,7 +341,7 @@
         </div>
 
         <label class="amount-preview amount-preview-input">
-          <span>Выбрано</span>
+          <span>Сумма</span>
           <input
             id="selectedAmountInput"
             type="text"
@@ -302,20 +353,111 @@
           >
         </label>
 
-        <label class="checkbox-row" id="transferToggleRow">
-          <input type="checkbox" id="transferCheckbox">
-          Это перевод, а не покупка
-        </label>
-
         <label>
           Комментарий
           <input id="noteInput" maxlength="80" placeholder="Например: продукты, школа, такси">
         </label>
 
+        <div class="operation-action-grid">
+          <button type="button" class="op-action op-purchase" data-op="purchase">Покупка</button>
+          <button type="button" class="op-action op-transfer" data-op="transfer">Перевод</button>
+          <button type="button" class="op-action op-income" data-op="income">Пополнение</button>
+        </div>
+
         <div class="dialog-actions operation-dialog-actions">
           <button class="ghost" type="button" id="exitOperationButton">Выйти</button>
           <button class="danger" type="button" id="resetAmountButton">Сбросить</button>
-          <button class="primary" value="default" id="confirmOperationButton">Подтвердить</button>
+        </div>
+        <input type="checkbox" id="transferCheckbox" hidden>
+        <button type="submit" id="confirmOperationButton" hidden aria-hidden="true"></button>
+      </form>
+    </dialog>
+
+    <dialog id="historyEditDialog">
+      <form method="dialog" class="dialog-card operation-dialog" id="historyEditForm">
+        <div class="section-title">
+          <div>
+            <span class="label" id="historyEditPerson">Имя</span>
+            <h2 id="historyEditTitle">Операция</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelHistoryEditButton">Выйти</button>
+        </div>
+
+        <label class="amount-preview amount-preview-input">
+          <span id="historyEditAmountLabel">Сумма</span>
+          <input
+            id="historyEditAmountInput"
+            type="text"
+            inputmode="decimal"
+            enterkeyhint="done"
+            autocomplete="off"
+            placeholder="0"
+            aria-label="Сумма операции"
+          >
+        </label>
+
+        <label>
+          Комментарий
+          <input id="historyEditNoteInput" maxlength="80" placeholder="Например: продукты, школа">
+        </label>
+
+        <div class="operation-action-grid" id="historyEditTypeGrid">
+          <button type="button" class="op-action op-purchase" data-htype="purchase">Покупка</button>
+          <button type="button" class="op-action op-transfer" data-htype="transfer">Перевод</button>
+          <button type="button" class="op-action op-income" data-htype="income">Пополнение</button>
+        </div>
+
+        <div class="dialog-actions operation-dialog-actions">
+          <button class="ghost" type="button" id="exitHistoryEditButton">Выйти</button>
+          <button class="danger" type="button" id="deleteHistoryEditButton">Удалить</button>
+          <button class="primary" type="button" id="saveHistoryEditButton">Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dayHistoryDialog">
+      <form method="dialog" class="dialog-card">
+        <div class="section-title">
+          <div>
+            <span class="label" id="dayHistoryLabel">По дням</span>
+            <h2 id="dayHistoryTitle">История дней</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelDayHistoryButton">Закрыть</button>
+        </div>
+        <div class="day-history-list" id="dayHistoryList"></div>
+      </form>
+    </dialog>
+
+    <dialog id="bulkListDialog">
+      <form method="dialog" class="dialog-card bulk-dialog" id="bulkListForm">
+        <div class="section-title">
+          <div>
+            <span class="label">Списком</span>
+            <h2>Добавить список</h2>
+          </div>
+          <button class="ghost" type="button" id="cancelBulkListButton">Выйти</button>
+        </div>
+
+        <div id="bulkStepInput">
+          <p class="muted sync-hint">Каждая строка: имя (примерно) и сумма в конце. Enter — новая строка.<br>Например: <b>виктор цуп 367</b></p>
+          <textarea id="bulkListInput" class="bulk-textarea" rows="7" placeholder="виктор цуп 367&#10;викт озон 899&#10;люд тиньк 6000" autocomplete="off"></textarea>
+          <div class="dialog-actions">
+            <button class="ghost" type="button" id="bulkCancelButton2">Выйти</button>
+            <button class="primary" type="button" id="bulkRecognizeButton">Распознать</button>
+          </div>
+        </div>
+
+        <div id="bulkStepMatch" hidden>
+          <p class="muted sync-hint" id="bulkMatchHint">Отметьте нужного человека в каждой строке, затем выберите тип операции.</p>
+          <div class="bulk-match-list" id="bulkMatchList"></div>
+          <div class="operation-action-grid" id="bulkTypeGrid">
+            <button type="button" class="op-action op-purchase" data-htype="purchase">Покупка</button>
+            <button type="button" class="op-action op-transfer" data-htype="transfer">Перевод</button>
+            <button type="button" class="op-action op-income" data-htype="income">Пополнение</button>
+          </div>
+          <div class="dialog-actions">
+            <button class="ghost" type="button" id="bulkBackButton">Назад</button>
+          </div>
         </div>
       </form>
     </dialog>
@@ -381,12 +523,14 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=168" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=168" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="telegram-crypto.js?v=168" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=168" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=168" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=168" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="app.js?v=168" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=178" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=178" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=178" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=178" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=178" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=178" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=178" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=178" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=178" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
