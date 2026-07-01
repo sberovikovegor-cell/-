@@ -23,7 +23,8 @@ html {
 
 html,
 body {
-  overflow-x: hidden;
+  /* clip (а не hidden) не создаёт контейнер прокрутки — position: sticky снова работает */
+  overflow-x: clip;
   max-width: 100%;
 }
 
@@ -2230,4 +2231,85 @@ body:not(.android-webview) .top-actions-bar {
 
 .person-sync-code-block .mini {
   opacity: 0.7;
+}
+
+/* --- v180 --- */
+
+/* Быстрая строка фильтров (Сорт / все фильтры / 1 фильтр / ✅ / − +) */
+.quick-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.quick-filter-row .inline-label {
+  flex: 0 0 auto;
+}
+
+.quick-sort-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 130px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.all-filters-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.quick-filter-row .single-filter-text {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.quick-filter-row .toggle-chip,
+.quick-filter-row .ghost.mini {
+  flex: 0 0 auto;
+}
+
+#allFiltersPanel {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+#allFiltersPanel .banks-bar {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+/* «+ Карта» как полноценная страница на весь экран */
+#personDialog[open] {
+  top: 0;
+  left: 0;
+  transform: none;
+}
+
+#personDialog {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+}
+
+#personDialog .dialog-card {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  min-height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 18px 16px 40px;
+  align-content: start;
 }
