@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "190";
+const APP_BUILD = "191";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -397,7 +397,8 @@ const elements = {
   cancelPersonHistoryButton: document.querySelector("#cancelPersonHistoryButton"),
   xferTimelineDialog: document.querySelector("#xferTimelineDialog"),
   xferTimelineTitle: document.querySelector("#xferTimelineTitle"),
-  xferTimelineContent: document.querySelector("#xferTimelineContent"),
+  xferTimelineHint: document.querySelector("#xferTimelineHint"),
+  xferTimelineList: document.querySelector("#xferTimelineList"),
   cancelXferTimelineButton: document.querySelector("#cancelXferTimelineButton"),
   personIncomeDialog: document.querySelector("#personIncomeDialog"),
   personIncomeTitle: document.querySelector("#personIncomeTitle"),
@@ -2801,13 +2802,11 @@ function fillPersonCard(card, person, stats, detailed) {
   if (incomeEl) incomeEl.textContent = formatMoneyChip(stats.lastIncomeAmount ?? 0);
   const statsParts = formatPersonPurchaseStatsParts(stats);
   const statsMainEl = card.querySelector(".person-stats-main");
-  const statsXferEl = card.querySelector(".person-stats-xfer-slot");
   const statsEl = card.querySelector(".person-stats-line");
-  if (statsMainEl && statsXferEl) {
-    statsMainEl.innerHTML = statsParts.mainHtml;
-    statsXferEl.innerHTML = statsParts.xferHtml;
+  if (statsMainEl) {
+    statsMainEl.innerHTML = statsParts.rowHtml;
   } else if (statsEl) {
-    statsEl.innerHTML = statsParts.fullHtml;
+    statsEl.innerHTML = statsParts.rowHtml;
   }
   if (detailed) {
     fillPersonDetailsBlock(card, person);
@@ -2879,7 +2878,6 @@ function buildPersonCard(person, stats, detailed) {
       ${topActionsHtml}
       <div class="person-line person-line-stats">
         <span class="person-stats-line person-stats-main"></span>
-        <span class="person-stats-xfer-slot"></span>
       </div>
     </div>`;
   fillPersonCard(card, person, stats, detailed);
@@ -3757,16 +3755,35 @@ function buildXferTimeline(personId) {
   return lines.join("\n");
 }
 
+function getPurchasesSinceLastIncome(personId) {
+  const personHistory = state.history
+    .filter((item) => item.personId === personId)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  const incomes = personHistory.filter((item) => item.type === "income");
+  const lastIncome = incomes[incomes.length - 1] ?? null;
+  if (!lastIncome) return [];
+  const lastIncomeIndex = personHistory.findIndex((item) => item.id === lastIncome.id);
+  return personHistory
+    .slice(lastIncomeIndex + 1)
+    .filter((item) => item.type === "purchase")
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
 function openXferTimelineDialog(personId) {
   const person = state.people.find((item) => item.id === personId);
   if (!person || !elements.xferTimelineDialog) return;
-  const text = buildXferTimeline(personId);
+  const purchases = getPurchasesSinceLastIncome(personId);
   if (elements.xferTimelineTitle) {
     elements.xferTimelineTitle.textContent = person.name;
   }
-  if (elements.xferTimelineContent) {
-    elements.xferTimelineContent.textContent = text || "С последнего пополнения операций не было.";
+  if (elements.xferTimelineHint) {
+    elements.xferTimelineHint.textContent = "Цифра — переводы с последнего пополнения (0 зелёный, 1 жёлтый, 2+ красный; при покупках формат 2-1). Ниже — покупки с момента последнего пополнения.";
   }
+  renderMiniHistoryList(
+    elements.xferTimelineList,
+    purchases,
+    "Покупок с последнего пополнения пока нет",
+  );
   openAppDialog(elements.xferTimelineDialog);
 }
 
@@ -6017,18 +6034,18 @@ function formatPersonPurchaseStatsParts(stats) {
   const count = stats.purchasesCount || 0;
   const cls = count >= 3 ? "stat-num ok" : count >= 1 ? "stat-num warn" : "stat-num";
   const num = (text) => `<span class="${cls}">${text}</span>`;
+  const monthHtml = `<button type="button" class="month-spend-indicator" data-action="month-spend" aria-label="Траты за месяц">${formatMoneyChip(stats.monthSpendTotal || 0)}</button>`;
   const sincePart = `С пополнения ${num(formatMoneyRub(stats.purchasesTotal))} • ${num(formatPurchaseCount(stats.purchasesCount))}`;
   const totalPart = `Всего ${num(formatMoneyRub(stats.purchasesAllTotal))} - ${num(formatPurchaseCount(stats.purchasesAllCount))}`;
-  const textPart = `${sincePart} - ${totalPart}`;
+  const bodyHtml = `${sincePart} ${monthHtml} - ${totalPart}`;
   const xferHtml = formatTransferIndicatorHtml(stats.transferIndicator);
-  const monthHtml = `<button type="button" class="month-spend-indicator" data-action="month-spend" aria-label="Траты за месяц">${formatMoneyChip(stats.monthSpendTotal || 0)}</button>`;
-  const mainHtml = `<span class="person-stats-wrap"><span class="person-stats-text">${textPart}</span>${monthHtml}</span>`;
-  const fullHtml = `${mainHtml}${xferHtml}`;
-  return { mainHtml, xferHtml, fullHtml };
+  const rowHtml = `<span class="person-stats-row"><span class="person-stats-body">${bodyHtml}</span>${xferHtml}</span>`;
+  const mainHtml = `${sincePart} - ${totalPart}`;
+  return { rowHtml, mainHtml, bodyHtml, xferHtml };
 }
 
 function formatPersonPurchaseStatsHtml(stats) {
-  return formatPersonPurchaseStatsParts(stats).fullHtml;
+  return formatPersonPurchaseStatsParts(stats).rowHtml;
 }
 
 function formatTransferIndicatorHtml(ti) {
