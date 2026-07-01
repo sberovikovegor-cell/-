@@ -1,13 +1,22 @@
-// УСТАРЕЛО — не используется. Синхронизация через telegram-config.js + TELEGRAM_СИНХРОНИЗАЦИЯ.md
-// Один раз настрой Firebase (см. СИНХРОНИЗАЦИЯ_СЕМЬИ.md), затем enabled: true
-window.FAMILY_SYNC_CONFIG = {
-  enabled: false,
-  firebase: {
-    apiKey: "ВАШ_API_KEY",
-    authDomain: "ВАШ_PROJECT.firebaseapp.com",
-    projectId: "ВАШ_PROJECT_ID",
-    storageBucket: "ВАШ_PROJECT.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abc123",
-  },
+// ── Синхронизация через Firebase Realtime Database ──
+// Пока enabled:false — приложение работает на Telegram (как раньше).
+// Как заполнить (5 минут):
+//   1) console.firebase.google.com → Add project
+//   2) Build → Realtime Database → Create Database (регион, режим locked)
+//   3) Project settings → General → Your apps → Web (</>) → firebaseConfig
+//   4) Вставь databaseURL ниже и поставь enabled: true
+//
+// databaseURL выглядит так:
+//   https://ИМЯ-ПРОЕКТА-default-rtdb.europe-west1.firebasedatabase.app
+//   (или ...firebaseio.com)
+//
+// Код семьи и «Секрет синхронизации» вводятся в приложении
+// (кнопка «Код семьи» в окне +Карта) — они общие с Telegram.
+// Данные шифруются на телефоне: Firebase хранит только зашифрованный «мусор».
+window.FAMILY_FIREBASE_CONFIG = {
+  enabled: true,
+  databaseURL: "https://shifr-femeli-default-rtdb.europe-west1.firebasedatabase.app",
+  // Необязательно (нужно только если включишь правила с авторизацией по токену):
+  apiKey: "",
+  projectId: "shifr-femeli",
 };
