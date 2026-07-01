@@ -1841,6 +1841,7 @@ body {
   font-weight: 800;
   color: #fff;
   cursor: pointer;
+  opacity: 0.88;
 }
 
 .op-action:disabled {
@@ -2328,5 +2329,71 @@ body:not(.android-webview) .top-actions-bar {
 }
 
 .person-view-form {
+  padding: 0;
+}
+
+/* Диалог операции: ФИО крупно, статистика как на карточке */
+.operation-head {
+  align-items: flex-start;
+}
+
+.operation-head-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.operation-balance-value {
+  display: block;
+  margin: 0 0 2px;
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: #f0f4ff;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.operation-person-name {
+  margin: 2px 0 6px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #e8f0ff;
+  line-height: 1.15;
+}
+
+.operation-dialog .op-action {
+  opacity: 0.52;
+  filter: saturate(0.65);
+}
+
+.operation-dialog .op-action:not(:disabled):active {
+  opacity: 0.72;
+}
+
+.operation-dialog .op-action.op-purchase {
+  background: linear-gradient(145deg, rgba(255, 107, 107, 0.55), rgba(226, 59, 59, 0.45));
+}
+
+.operation-dialog .op-action.op-transfer {
+  background: linear-gradient(145deg, rgba(90, 166, 255, 0.55), rgba(59, 120, 226, 0.45));
+}
+
+.operation-dialog .op-action.op-income {
+  background: linear-gradient(145deg, rgba(79, 209, 122, 0.55), rgba(43, 168, 90, 0.45));
+}
+
+.operation-stats-line {
+  font-size: 0.65rem;
+  line-height: 1.35;
+}
+
+.operation-stats-bottom {
+  margin-top: 8px;
+}
+
+.bulk-view {
+  padding: 14px 12px 28px;
+}
+
+.bulk-view-form {
   padding: 0;
 }
