@@ -25,13 +25,14 @@ const CLOUD_WIPE_AT_KEY = "family-counter-cloud-wipe-at";
 const DATA_EPOCH_KEY = "family-counter-data-epoch";
 const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
+const DEVICE_NAME_KEY = "family-counter-device-name";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const BULK_DRAFT_KEY = "family-counter-bulk-draft-local";
 const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "184";
+const APP_BUILD = "185";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -232,6 +233,11 @@ let state;
 try {
   enforceDataEpochOnStartup();
   state = loadState();
+  const localDeviceName = getLocalDeviceName();
+  if (localDeviceName) {
+    state.deviceNames = { ...(state.deviceNames || {}), [getDeviceId()]: localDeviceName };
+  }
+  scheduleCloudConfirmPoll();
   if (state.wipedAtMs > 0) {
     const prevCloudWipe = Number(localStorage.getItem(CLOUD_WIPE_AT_KEY) || 0);
     localStorage.setItem(CLOUD_WIPE_AT_KEY, String(Math.max(prevCloudWipe, state.wipedAtMs)));
@@ -274,6 +280,7 @@ const elements = {
   historyView: document.querySelector("#historyView"),
   historyToggleButton: document.querySelector("#historyToggleButton"),
   syncStatus: document.querySelector("#syncStatus"),
+  lastDbChange: document.querySelector("#lastDbChange"),
   appVersion: document.querySelector("#appVersion"),
   openSyncDialogButton: document.querySelector("#openSyncDialogButton"),
   syncDialog: document.querySelector("#syncDialog"),
@@ -344,7 +351,6 @@ const elements = {
   operationPerson: document.querySelector("#operationPerson"),
   operationTitle: document.querySelector("#operationTitle"),
   operationStatsTop: document.querySelector("#operationStatsTop"),
-  operationStatsBottom: document.querySelector("#operationStatsBottom"),
   selectedAmountInput: document.querySelector("#selectedAmountInput"),
   transferToggleRow: document.querySelector("#transferToggleRow"),
   transferCheckbox: document.querySelector("#transferCheckbox"),
@@ -385,6 +391,15 @@ const elements = {
   dayHistoryTitle: document.querySelector("#dayHistoryTitle"),
   dayHistoryLabel: document.querySelector("#dayHistoryLabel"),
   dayHistoryList: document.querySelector("#dayHistoryList"),
+  personHistoryDialog: document.querySelector("#personHistoryDialog"),
+  personHistoryTitle: document.querySelector("#personHistoryTitle"),
+  personHistoryList: document.querySelector("#personHistoryList"),
+  cancelPersonHistoryButton: document.querySelector("#cancelPersonHistoryButton"),
+  xferTimelineDialog: document.querySelector("#xferTimelineDialog"),
+  xferTimelineTitle: document.querySelector("#xferTimelineTitle"),
+  xferTimelineContent: document.querySelector("#xferTimelineContent"),
+  cancelXferTimelineButton: document.querySelector("#cancelXferTimelineButton"),
+  deviceNameFooter: document.querySelector("#deviceNameFooter"),
   cancelDayHistoryButton: document.querySelector("#cancelDayHistoryButton"),
   bulkListView: document.querySelector("#bulkListView"),
   bulkListForm: document.querySelector("#bulkListForm"),
@@ -458,6 +473,109 @@ function renderAppVersion() {
   if (elements.appVersion) {
     elements.appVersion.textContent = `вер. ${APP_BUILD}`;
   }
+  renderLastDbChange();
+}
+
+function getLocalDeviceName() {
+  return String(localStorage.getItem(DEVICE_NAME_KEY) || "").trim();
+}
+
+function getDefaultDeviceLabel(deviceId) {
+  if (!deviceId) return "Устройство";
+  const tail = String(deviceId).replace(/^d-\d+-/, "").slice(0, 4);
+  return tail ? `Устройство ${tail}` : "Устройство";
+}
+
+function getDeviceLabel(deviceId) {
+  if (!deviceId) return "";
+  if (deviceId === getDeviceId()) {
+    const local = getLocalDeviceName();
+    if (local) return local;
+  }
+  const names = state.deviceNames || {};
+  return names[deviceId] || getDefaultDeviceLabel(deviceId);
+}
+
+function touchLastChangeMeta() {
+  const now = Date.now();
+  state.lastChangeAt = now;
+  state.lastChangeDeviceId = getDeviceId();
+  const name = getLocalDeviceName();
+  if (name) {
+    state.deviceNames = { ...(state.deviceNames || {}), [getDeviceId()]: name };
+  }
+}
+
+function mergeLastChangeMeta(localState, remoteState, mergedState) {
+  const localAt = Number(localState?.lastChangeAt || localState?.uiUpdatedAt || 0);
+  const remoteAt = Number(remoteState?.lastChangeAt || remoteState?.uiUpdatedAt || 0);
+  const at = Math.max(localAt, remoteAt);
+  let deviceId = "";
+  if (remoteAt > localAt) {
+    deviceId = remoteState?.lastChangeDeviceId || "";
+  } else if (localAt > remoteAt) {
+    deviceId = localState?.lastChangeDeviceId || "";
+  } else {
+    deviceId = remoteState?.lastChangeDeviceId || localState?.lastChangeDeviceId || "";
+  }
+  return {
+    ...mergedState,
+    lastChangeAt: at,
+    lastChangeDeviceId: deviceId,
+    deviceNames: {
+      ...(localState?.deviceNames || {}),
+      ...(remoteState?.deviceNames || {}),
+    },
+  };
+}
+
+function formatShortDateTime(ms) {
+  if (!ms) return "";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(ms);
+}
+
+function renderLastDbChange() {
+  if (!elements.lastDbChange) return;
+  const at = Number(state.lastChangeAt || state.uiUpdatedAt || 0);
+  if (!at) {
+    elements.lastDbChange.textContent = "";
+    elements.lastDbChange.hidden = true;
+    return;
+  }
+  const deviceId = state.lastChangeDeviceId || getDeviceId();
+  const device = getDeviceLabel(deviceId);
+  elements.lastDbChange.hidden = false;
+  elements.lastDbChange.textContent = `${formatShortDateTime(at)} · ${device}`;
+}
+
+function renderDeviceNameFooter() {
+  if (!elements.deviceNameFooter) return;
+  const name = getLocalDeviceName() || getDefaultDeviceLabel(getDeviceId());
+  elements.deviceNameFooter.textContent = name;
+}
+
+function promptDeviceRename() {
+  const current = getLocalDeviceName();
+  const next = prompt("Название этого устройства:", current || getDefaultDeviceLabel(getDeviceId()));
+  if (next == null) return;
+  const trimmed = String(next).trim();
+  if (trimmed) {
+    localStorage.setItem(DEVICE_NAME_KEY, trimmed);
+    state.deviceNames = { ...(state.deviceNames || {}), [getDeviceId()]: trimmed };
+  } else {
+    localStorage.removeItem(DEVICE_NAME_KEY);
+    const names = { ...(state.deviceNames || {}) };
+    delete names[getDeviceId()];
+    state.deviceNames = names;
+  }
+  saveState();
+  renderDeviceNameFooter();
+  renderLastDbChange();
 }
 
 function setupSyncDialogMode() {
@@ -488,27 +606,22 @@ function initFamilySync() {
   };
 
   FamilySync.onBotExportRemote = handleRemoteBotExport;
-  FamilySync.onPushComplete = (success, pushedState) => {
+  FamilySync.onPushComplete = (success) => {
     if (!success) {
-      localStorage.removeItem(CLOUD_CONFIRM_FP_KEY);
-      renderSyncNoticeRow();
+      if (FamilySync.updateSyncStatus) {
+        FamilySync.updateSyncStatus("error", "Не отправлено");
+      }
       return;
-    }
-    if (pushedState) {
-      const fp = stateCloudFingerprint(pushedState);
-      if (fp) localStorage.setItem(CLOUD_CONFIRM_FP_KEY, fp);
     }
     const pushedRev = Number(localStorage.getItem("family-counter-local-version") || 0);
     if (pushedRev > 0) {
       localStorage.setItem(APPLIED_REMOTE_PULL_KEY, String(pushedRev));
     }
-    if (localStorage.getItem(CLOUD_CONFIRM_FP_KEY) && FamilySync.updateSyncStatus) {
-      FamilySync.updateSyncStatus("online", "Проверка канала…");
+    if (FamilySync.updateSyncStatus) {
+      FamilySync.updateSyncStatus("synced", "Синхронизировано");
     }
-    scheduleCloudConfirmPoll();
-    renderSyncNoticeRow();
   };
-  FamilySync.onBeforeSyncedStatus = () => Boolean(localStorage.getItem(CLOUD_CONFIRM_FP_KEY));
+  FamilySync.onBeforeSyncedStatus = () => false;
 
   FamilySync.onOnline = () => {
     retryBotExportIfNeeded();
@@ -610,51 +723,13 @@ function stateCloudFingerprint(appState) {
   return `e${epoch}|w${wipe}|u${ui}|po${orderAt}|ord${peopleOrder}|p${peopleSig}|h${histLen}|hc${histClear}|hm${histMonths}|f${folders}`;
 }
 
-function tryConfirmCloudSync(remoteState) {
-  const pending = localStorage.getItem(CLOUD_CONFIRM_FP_KEY);
-  if (!pending) return false;
-  const target = remoteState
-    ? applyDeletedPersonFilter(normalizeLoadedState(remoteState))
-    : state;
-  if (stateCloudFingerprint(target) !== pending) return false;
+function tryConfirmCloudSync() {
   localStorage.removeItem(CLOUD_CONFIRM_FP_KEY);
-  if (window.FamilySync?.updateSyncStatus) {
-    FamilySync.updateSyncStatus("synced", "Синхронизировано");
-  }
-  renderSyncNoticeRow();
-  return true;
+  return false;
 }
 
 function scheduleCloudConfirmPoll() {
-  if (!localStorage.getItem(CLOUD_CONFIRM_FP_KEY)) return;
-  if (cloudConfirmTimer) return;
-  const started = Date.now();
-  const tick = async () => {
-    const pending = localStorage.getItem(CLOUD_CONFIRM_FP_KEY);
-    if (!pending) {
-      cloudConfirmTimer = null;
-      return;
-    }
-    if (Date.now() - started > 120000) {
-      if (FamilySync?.updateSyncStatus) {
-        FamilySync.updateSyncStatus("online", "В канале — ПК обновится позже");
-      }
-      cloudConfirmTimer = null;
-      return;
-    }
-    try {
-      if (FamilySync?.pullNow) await FamilySync.pullNow();
-      tryConfirmCloudSync(state);
-    } catch {
-      // ignore pull errors during confirm poll
-    }
-    if (!localStorage.getItem(CLOUD_CONFIRM_FP_KEY)) {
-      cloudConfirmTimer = null;
-      return;
-    }
-    cloudConfirmTimer = setTimeout(tick, 4000);
-  };
-  cloudConfirmTimer = setTimeout(tick, 2500);
+  localStorage.removeItem(CLOUD_CONFIRM_FP_KEY);
 }
 
 function scheduleStartupCloudPush() {
@@ -751,6 +826,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = finalizePeopleAfterMerge(localBefore, normalizedRemote, state);
   state = preserveLocalBalanceOverrides(localBefore, state);
   state = preserveLocalPeopleOrder(localBefore, state);
+  state = mergeLastChangeMeta(localBefore, normalizedRemote, state);
   syncBalancesFromHistory();
   state = ensureStateDataEpoch(state);
   state.deletedPersonIds = [...getDeletedPersonIds()];
@@ -1130,6 +1206,8 @@ const APP_BACK_DIALOGS = [
   elements?.botOfflineDialog,
   elements?.historyEditDialog,
   elements?.dayHistoryDialog,
+  elements?.personHistoryDialog,
+  elements?.xferTimelineDialog,
 ].filter(Boolean);
 
 function bindDialogBackdropDismiss() {
@@ -1502,6 +1580,18 @@ function bindEvents() {
   if (elements.cancelDayHistoryButton) {
     elements.cancelDayHistoryButton.addEventListener("click", () => closeAppDialog(elements.dayHistoryDialog));
   }
+  if (elements.cancelPersonHistoryButton) {
+    elements.cancelPersonHistoryButton.addEventListener("click", () => closeAppDialog(elements.personHistoryDialog));
+  }
+  if (elements.personHistoryList) {
+    elements.personHistoryList.addEventListener("click", handleHistoryClick);
+  }
+  if (elements.cancelXferTimelineButton) {
+    elements.cancelXferTimelineButton.addEventListener("click", () => closeAppDialog(elements.xferTimelineDialog));
+  }
+  if (elements.deviceNameFooter) {
+    elements.deviceNameFooter.addEventListener("click", promptDeviceRename);
+  }
   bindBulkListEvents();
   bindDialogBackdropDismiss();
   if (elements.commentFilter) {
@@ -1639,6 +1729,9 @@ function getDefaultState() {
     singleFilterMode: false,
     botGroupId: null,
     uiUpdatedAt: 0,
+    lastChangeAt: 0,
+    lastChangeDeviceId: "",
+    deviceNames: {},
     peopleOrderUpdatedAt: 0,
     wipedAtMs: 0,
     dataEpoch: requiredEpoch > 0 ? requiredEpoch : 0,
@@ -1904,6 +1997,11 @@ function normalizeLoadedState(parsed) {
     singleFilterMode: Boolean(withTombstones.singleFilterMode),
     botGroupId: Number.isFinite(botGroupId) ? botGroupId : null,
     uiUpdatedAt: Number(withTombstones.uiUpdatedAt || 0),
+    lastChangeAt: Number(withTombstones.lastChangeAt || withTombstones.uiUpdatedAt || 0),
+    lastChangeDeviceId: String(withTombstones.lastChangeDeviceId || ""),
+    deviceNames: withTombstones.deviceNames && typeof withTombstones.deviceNames === "object"
+      ? { ...withTombstones.deviceNames }
+      : {},
     peopleOrderUpdatedAt: Number(withTombstones.peopleOrderUpdatedAt || 0),
     wipedAtMs: Number(withTombstones.wipedAtMs || 0),
     dataEpoch: Number(withTombstones.dataEpoch || 0),
@@ -2188,46 +2286,29 @@ function renderBotToggleButton(botToggle, person) {
 
 function renderSyncNoticeRow() {
   const noticeRow = elements.syncNoticeRow;
-  const noticeText = elements.syncNoticeText;
-  if (!noticeRow || !noticeText) return;
-
-  const cloudPending = localStorage.getItem(CLOUD_CONFIRM_FP_KEY);
+  if (noticeRow) {
+    noticeRow.hidden = true;
+  }
+  if (!elements.syncStatus) return;
   const offlineEdits = Number(localStorage.getItem(LOCAL_PUSH_REVISION_KEY) || 0) > 0;
   const pending = hasBotPendingSync() && !canPushBotNow();
   const alert = state.syncAlert;
   const health = state.syncHealth;
   const syncMsg = alert?.message || (health && !health.ok ? health.message : "");
-  const successVisible = elements.botSuccessBanner && !elements.botSuccessBanner.hidden;
-
-  let text = "";
-  let level = "warn";
-  if (cloudPending) {
-    text = "Проверка синхронизации в канале…";
-    level = "warn";
-  } else if (offlineEdits && !isNetworkAvailable()) {
-    text = "Изменения сохранены — отправим при подключении к сети";
-    level = "warn";
-  } else if (pending) {
-    text = "Ожидание ответа бота на ПК…";
-    level = "warn";
-  } else if (syncMsg) {
-    text = `Синхронизация: ${syncMsg}`;
-    level = alert?.level === "error" || (health && !health.ok) ? "error" : "warn";
-  } else if (successVisible && !cloudPending && !hasBotPendingSync()) {
-    text = "Данные успешно отправлены";
-    level = "ok";
-  }
-
-  if (!text) {
-    noticeRow.hidden = true;
-    noticeText.textContent = "";
-    noticeRow.dataset.level = "";
+  if (offlineEdits && !isNetworkAvailable()) {
+    elements.syncStatus.dataset.status = "offline";
+    elements.syncStatus.textContent = "Сохранено — отправим при сети";
     return;
   }
-
-  noticeRow.hidden = false;
-  noticeText.textContent = text;
-  noticeRow.dataset.level = level;
+  if (pending) {
+    elements.syncStatus.dataset.status = "offline";
+    elements.syncStatus.textContent = "Ожидание ответа бота…";
+    return;
+  }
+  if (syncMsg) {
+    elements.syncStatus.dataset.status = alert?.level === "error" || (health && !health.ok) ? "error" : "offline";
+    elements.syncStatus.textContent = syncMsg;
+  }
 }
 
 function renderSyncAlertBanner() {
@@ -2325,6 +2406,9 @@ function applyManualBalanceCorrection(personId, personName, balance, at) {
 function saveState(options = {}) {
   syncBalancesFromHistory();
   state = ensureStateDataEpoch(state);
+  if (!options.skipMetaTouch) {
+    touchLastChangeMeta();
+  }
   state.deletedPersonIds = [...getDeletedPersonIds()];
   state.deletedFolderIds = [...getDeletedFolderIds()];
   const json = JSON.stringify(state);
@@ -2422,6 +2506,7 @@ function render(force = false) {
   if (!force && fp === lastRenderFingerprint) return;
   lastRenderFingerprint = fp;
   renderSyncNoticeRow();
+  renderAppVersion();
   renderHistoryPeriodSelect();
   renderTotal();
   renderFolders();
@@ -2430,6 +2515,7 @@ function render(force = false) {
   renderDetailsPeople();
   renderFilters();
   renderHistory();
+  renderDeviceNameFooter();
 }
 
 function renderHistoryTotals() {
@@ -2613,6 +2699,9 @@ function renderTotal() {
   let purchaseToday = 0;
   let transferToday = 0;
   let incomeToday = 0;
+  let purchaseTodayCount = 0;
+  let transferTodayCount = 0;
+  let incomeTodayCount = 0;
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const todayMs = startOfToday.getTime();
@@ -2620,27 +2709,34 @@ function renderTotal() {
     const isToday = Number(item.createdAt || 0) >= todayMs;
     if (item.type === "purchase") {
       purchaseTotal += item.amount;
-      if (isToday) purchaseToday += item.amount;
+      if (isToday) {
+        purchaseToday += item.amount;
+        purchaseTodayCount += 1;
+      }
     }
     if (item.type === "transfer") {
       transferTotal += item.amount;
-      if (isToday) transferToday += item.amount;
+      if (isToday) {
+        transferToday += item.amount;
+        transferTodayCount += 1;
+      }
     }
     if (item.type === "income" && isToday) {
       incomeToday += item.amount;
+      incomeTodayCount += 1;
     }
   });
   elements.familyTotal.textContent = formatMoney(balance);
   elements.familyPurchaseTotal.textContent = formatMoney(purchaseTotal);
   elements.familyTransferTotal.textContent = formatMoney(transferTotal);
   if (elements.familyPurchaseToday) {
-    elements.familyPurchaseToday.textContent = `сегодня ${formatMoney(purchaseToday)}`;
+    elements.familyPurchaseToday.textContent = `${formatMoney(purchaseToday)} ${purchaseTodayCount}`;
   }
   if (elements.familyIncomeToday) {
-    elements.familyIncomeToday.textContent = `сегодня +${formatMoney(incomeToday)}`;
+    elements.familyIncomeToday.textContent = `${formatMoney(incomeToday)} ${incomeTodayCount}`;
   }
   if (elements.familyTransferToday) {
-    elements.familyTransferToday.textContent = `сегодня ${formatMoney(transferToday)}`;
+    elements.familyTransferToday.textContent = `${formatMoney(transferToday)} ${transferTodayCount}`;
   }
 }
 
@@ -3168,9 +3264,19 @@ function applyPeopleSort(people) {
       (a, b) => getPersonStats(b.id).purchasesAllCount - getPersonStats(a.id).purchasesAllCount,
     );
   }
+  if (peopleSortMode === "purchases-all-asc") {
+    return [...people].sort(
+      (a, b) => getPersonStats(a.id).purchasesAllCount - getPersonStats(b.id).purchasesAllCount,
+    );
+  }
   if (peopleSortMode === "purchases-since") {
     return [...people].sort(
       (a, b) => getPersonStats(b.id).purchasesCount - getPersonStats(a.id).purchasesCount,
+    );
+  }
+  if (peopleSortMode === "purchases-since-asc") {
+    return [...people].sort(
+      (a, b) => getPersonStats(a.id).purchasesCount - getPersonStats(b.id).purchasesCount,
     );
   }
   return sortPeopleByListOrder(people);
@@ -3375,7 +3481,16 @@ function getPersonStats(personId) {
     (item) => item.type === "purchase" && now - item.createdAt <= day7
   );
 
+  const transfersSinceIncome = personHistory
+    .slice(lastIncomeIndex + 1)
+    .filter((item) => item.type === "transfer");
+  const transferIndicator = buildTransferIndicator(
+    transfersSinceIncome.length,
+    purchasesSinceIncome.length,
+  );
+
   return {
+    personId,
     lastIncomeAmount: lastIncome?.amount ?? 0,
     lastIncomeAt: lastIncome?.createdAt ?? null,
     toppedUpSinceLastPurchase,
@@ -3389,7 +3504,66 @@ function getPersonStats(personId) {
     purchasesLast3DaysTotal: purchasesLast3Days.reduce((sum, item) => sum + item.amount, 0),
     purchasesLast7DaysCount: purchasesLast7Days.length,
     purchasesLast7DaysTotal: purchasesLast7Days.reduce((sum, item) => sum + item.amount, 0),
+    transferIndicator,
   };
+}
+
+function buildTransferIndicator(transfersCount, purchasesCount) {
+  if (transfersCount <= 0) return null;
+  const diff = transfersCount - purchasesCount;
+  if (purchasesCount > transfersCount) {
+    return {
+      displayText: `${transfersCount}-${purchasesCount}`,
+      colorClass: "xfer-ok",
+    };
+  }
+  let colorClass = "xfer-ok";
+  if (diff === 1) colorClass = "xfer-warn";
+  else if (diff >= 2) colorClass = "xfer-bad";
+  return {
+    displayText: String(Math.max(0, diff)),
+    colorClass,
+  };
+}
+
+function buildXferTimeline(personId) {
+  const personHistory = state.history
+    .filter((item) => item.personId === personId)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  const incomes = personHistory.filter((item) => item.type === "income");
+  const lastIncome = incomes[incomes.length - 1] ?? null;
+  if (!lastIncome) return "";
+  const lastIncomeIndex = personHistory.findIndex((item) => item.id === lastIncome.id);
+  const slice = personHistory.slice(lastIncomeIndex);
+  const lines = [];
+  let currentLine = "";
+  slice.forEach((item) => {
+    const amount = Math.round(Number(item.amount || 0));
+    if (item.type === "income") {
+      if (currentLine) lines.push(currentLine);
+      currentLine = `+${amount}`;
+    } else if (item.type === "transfer") {
+      if (currentLine) lines.push(currentLine);
+      currentLine = `---${amount}`;
+    } else if (item.type === "purchase") {
+      currentLine += `-${amount}`;
+    }
+  });
+  if (currentLine) lines.push(currentLine);
+  return lines.join("\n");
+}
+
+function openXferTimelineDialog(personId) {
+  const person = state.people.find((item) => item.id === personId);
+  if (!person || !elements.xferTimelineDialog) return;
+  const text = buildXferTimeline(personId);
+  if (elements.xferTimelineTitle) {
+    elements.xferTimelineTitle.textContent = person.name;
+  }
+  if (elements.xferTimelineContent) {
+    elements.xferTimelineContent.textContent = text || "С последнего пополнения операций не было.";
+  }
+  openAppDialog(elements.xferTimelineDialog);
 }
 
 function renderFilters() {
@@ -3648,6 +3822,13 @@ function renderHistory() {
     const dateEl = document.createElement("span");
     dateEl.textContent = formatDate(item.createdAt);
     sub.append(typeEl, dateEl);
+    const deviceLabel = getDeviceLabel(item.deviceId);
+    if (deviceLabel) {
+      const deviceEl = document.createElement("span");
+      deviceEl.className = "history-device";
+      deviceEl.textContent = deviceLabel;
+      sub.append(deviceEl);
+    }
 
     row.append(main, sub);
 
@@ -3780,11 +3961,41 @@ function buildDayHistory(metric) {
     const date = new Date(Number(item.createdAt || 0));
     date.setHours(0, 0, 0, 0);
     const key = date.getTime();
-    byDay.set(key, (byDay.get(key) || 0) + Number(item.amount || 0));
+    const prev = byDay.get(key) || { sum: 0, count: 0 };
+    prev.sum += Number(item.amount || 0);
+    prev.count += 1;
+    byDay.set(key, prev);
   });
   return [...byDay.entries()]
     .sort((a, b) => b[0] - a[0])
-    .map(([dayMs, sum]) => ({ dayMs, sum }));
+    .map(([dayMs, { sum, count }]) => ({ dayMs, sum, count }));
+}
+
+function formatDateInputValue(dayMs) {
+  const date = new Date(dayMs);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function openHistoryForDay(metric, dayMs) {
+  closeAppDialog(elements.dayHistoryDialog);
+  const dateStr = formatDateInputValue(dayMs);
+  historyDateFromValue = dateStr;
+  historyDateToValue = dateStr;
+  if (elements.historyDateFrom) elements.historyDateFrom.value = dateStr;
+  if (elements.historyDateTo) elements.historyDateTo.value = dateStr;
+  if (elements.personFilter) elements.personFilter.value = "all";
+  elements.typeFilter.value = metric;
+  syncTabs(metric);
+  if (activeView !== "history") {
+    activeView = "history";
+    updateViewMode();
+    pushAppBackHistory();
+  } else {
+    renderHistory();
+  }
 }
 
 function formatDayLabel(dayMs) {
@@ -3813,15 +4024,16 @@ function openDayHistoryDialog(metric) {
     elements.dayHistoryList.append(empty);
   } else {
     const fragment = document.createDocumentFragment();
-    days.forEach(({ dayMs, sum }) => {
+    days.forEach(({ dayMs, sum, count }) => {
       const row = document.createElement("div");
       row.className = "day-history-row";
+      row.addEventListener("click", () => openHistoryForDay(metric, dayMs));
       const dateEl = document.createElement("span");
       dateEl.className = "day-date";
       dateEl.textContent = formatDayLabel(dayMs);
       const sumEl = document.createElement("span");
       sumEl.className = `day-sum ${metric}`;
-      sumEl.textContent = `${signByMetric[metric] || ""}${formatMoney(sum)}`;
+      sumEl.textContent = `${signByMetric[metric] || ""}${formatMoney(sum)} · ${count}`;
       row.append(dateEl, sumEl);
       fragment.append(row);
     });
@@ -4116,6 +4328,14 @@ function bindBulkListEvents() {
 }
 
 function handlePeopleClick(event) {
+  const xferBtn = event.target.closest('[data-action="xfer-timeline"]');
+  if (xferBtn) {
+    const card = event.target.closest(".person-card");
+    if (!card) return;
+    openXferTimelineDialog(card.dataset.personId);
+    return;
+  }
+
   const button = event.target.closest("button");
   const card = event.target.closest(".person-card");
   if (!button || !card) return;
@@ -4132,16 +4352,67 @@ function handlePeopleClick(event) {
   if (action === "history") openPersonHistory(person);
 }
 
-function openPersonHistory(person) {
-  if (!person) return;
-  elements.personFilter.value = person.id;
-  if (activeView !== "history") {
-    activeView = "history";
-    updateViewMode();
-    pushAppBackHistory();
-  } else {
-    renderHistory();
+function renderPersonHistoryModal(person) {
+  if (!elements.personHistoryList) return;
+  if (elements.personHistoryTitle) {
+    elements.personHistoryTitle.textContent = person.name;
   }
+  const rows = state.history
+    .filter((item) => item.personId === person.id)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  elements.personHistoryList.innerHTML = "";
+  if (rows.length === 0) {
+    elements.personHistoryList.append(createEmptyState("Истории пока нет", "Операции появятся после подтверждения."));
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  rows.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "history-item";
+    row.dataset.historyId = item.id;
+    const isBalanceSet = item.type === "balance_set";
+    const sign = isBalanceSet ? "=" : (item.direction === "plus" ? "+" : "-");
+    const amountText = isBalanceSet ? formatMoney(item.balanceAfter) : formatMoney(item.amount);
+
+    const main = document.createElement("div");
+    main.className = "history-row-main";
+    const typeEl = document.createElement("span");
+    typeEl.className = "history-name";
+    typeEl.textContent = historyTypeLabel(item.type);
+    const amountEl = document.createElement("span");
+    amountEl.className = `history-amount ${item.type}`;
+    amountEl.textContent = `${sign}${amountText}`;
+    main.append(typeEl, amountEl);
+
+    const sub = document.createElement("div");
+    sub.className = "history-row-sub";
+    const dateEl = document.createElement("span");
+    dateEl.textContent = formatDate(item.createdAt);
+    sub.append(dateEl);
+    const deviceLabel = getDeviceLabel(item.deviceId);
+    if (deviceLabel) {
+      const deviceEl = document.createElement("span");
+      deviceEl.className = "history-device";
+      deviceEl.textContent = deviceLabel;
+      sub.append(deviceEl);
+    }
+
+    row.append(main, sub);
+    if (item.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "history-row-note";
+      noteEl.textContent = item.note;
+      row.append(noteEl);
+    }
+    fragment.append(row);
+  });
+  elements.personHistoryList.append(fragment);
+}
+
+function openPersonHistory(person) {
+  if (!person || !elements.personHistoryDialog) return;
+  renderPersonHistoryModal(person);
+  openAppDialog(elements.personHistoryDialog);
 }
 
 function handleDetailsPeopleClick(event) {
@@ -4509,9 +4780,10 @@ function deleteEditingPerson() {
 }
 
 function setOperationButtonsEnabled(enabled) {
-  document.querySelectorAll(".op-action").forEach((btn) => {
+  document.querySelectorAll("#operationForm .op-action[data-op]").forEach((btn) => {
     btn.disabled = !enabled;
   });
+  elements.operationForm?.classList.toggle("has-amount", enabled);
 }
 
 function syncAmountFromInput() {
@@ -4560,7 +4832,7 @@ function openOperationDialog(person) {
   if (elements.operationTitle) elements.operationTitle.textContent = formatMoney(person.balance);
   if (elements.operationPerson) elements.operationPerson.textContent = person.name;
   if (elements.operationStatsTop) elements.operationStatsTop.innerHTML = statsHtml;
-  if (elements.operationStatsBottom) elements.operationStatsBottom.innerHTML = statsHtml;
+  elements.operationForm?.classList.remove("has-amount");
   elements.operationDialog.classList.remove("is-income");
   if (elements.transferCheckbox) elements.transferCheckbox.checked = false;
   elements.noteInput.value = "";
@@ -5481,7 +5753,7 @@ function handleRemoteBotExport(botExport) {
       }
     }
     render();
-    if (window.FamilySync?.updateSyncStatus && !localStorage.getItem(CLOUD_CONFIRM_FP_KEY)) {
+    if (window.FamilySync?.updateSyncStatus) {
       FamilySync.updateSyncStatus("synced", "Синхронизировано");
     }
     return;
@@ -5533,7 +5805,12 @@ function formatPersonPurchaseStatsHtml(stats) {
   const num = (text) => `<span class="${cls}">${text}</span>`;
   const sincePart = `С пополнения ${num(formatMoneyRub(stats.purchasesTotal))} • ${num(formatPurchaseCount(stats.purchasesCount))}`;
   const totalPart = `Всего ${num(formatMoneyRub(stats.purchasesAllTotal))} - ${num(formatPurchaseCount(stats.purchasesAllCount))}`;
-  return `${sincePart} - ${totalPart}`;
+  const textPart = `${sincePart} - ${totalPart}`;
+  if (!stats.transferIndicator) {
+    return `<span class="person-stats-text">${textPart}</span>`;
+  }
+  const ti = stats.transferIndicator;
+  return `<span class="person-stats-wrap"><span class="person-stats-text">${textPart}</span><button type="button" class="xfer-indicator ${ti.colorClass}" data-action="xfer-timeline" aria-label="Цепочка с пополнения">${ti.displayText}</button></span>`;
 }
 
 function formatPersonCardLine(person) {
