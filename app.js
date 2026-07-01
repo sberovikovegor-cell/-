@@ -26,10 +26,12 @@ const DATA_EPOCH_KEY = "family-counter-data-epoch";
 const FACTORY_RESET_PENDING_KEY = "family-counter-factory-reset-pending";
 const DEVICE_ID_KEY = "family-counter-device-id";
 const SESSION_ACTIVE_KEY = "family-counter-session-active";
+const BULK_DRAFT_KEY = "family-counter-bulk-draft-local";
+const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "182";
+const APP_BUILD = "184";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -314,7 +316,6 @@ const elements = {
   clearHistoryButton: document.querySelector("#clearHistoryButton"),
   nextMonthButton: document.querySelector("#nextMonthButton"),
   historyPeriodSelect: document.querySelector("#historyPeriodSelect"),
-  personDialog: document.querySelector("#personDialog"),
   personView: document.querySelector("#personView"),
   personForm: document.querySelector("#personForm"),
   personDialogTitle: document.querySelector("#personDialogTitle"),
@@ -329,7 +330,6 @@ const elements = {
   personUseInBotCheckbox: document.querySelector("#personUseInBotCheckbox"),
   personFolderPicker: document.querySelector("#personFolderPicker"),
   deletePersonButton: document.querySelector("#deletePersonButton"),
-  openSyncFromPersonButton: document.querySelector("#openSyncFromPersonButton"),
   cancelPersonButton: document.querySelector("#cancelPersonButton"),
   folderDialog: document.querySelector("#folderDialog"),
   folderForm: document.querySelector("#folderForm"),
@@ -343,6 +343,8 @@ const elements = {
   operationForm: document.querySelector("#operationForm"),
   operationPerson: document.querySelector("#operationPerson"),
   operationTitle: document.querySelector("#operationTitle"),
+  operationStatsTop: document.querySelector("#operationStatsTop"),
+  operationStatsBottom: document.querySelector("#operationStatsBottom"),
   selectedAmountInput: document.querySelector("#selectedAmountInput"),
   transferToggleRow: document.querySelector("#transferToggleRow"),
   transferCheckbox: document.querySelector("#transferCheckbox"),
@@ -384,7 +386,7 @@ const elements = {
   dayHistoryLabel: document.querySelector("#dayHistoryLabel"),
   dayHistoryList: document.querySelector("#dayHistoryList"),
   cancelDayHistoryButton: document.querySelector("#cancelDayHistoryButton"),
-  bulkListDialog: document.querySelector("#bulkListDialog"),
+  bulkListView: document.querySelector("#bulkListView"),
   bulkListForm: document.querySelector("#bulkListForm"),
   bulkListInput: document.querySelector("#bulkListInput"),
   bulkStepInput: document.querySelector("#bulkStepInput"),
@@ -550,15 +552,9 @@ function initFamilySync() {
     flushPendingFactoryResetToCloud();
     scheduleCloudEpochOverwriteOnce();
   } else if (!FamilySync.isConfigured()) {
-    FamilySync.updateSyncStatus("local", window.FAMILY_TELEGRAM_CONFIG?.enabled
-      ? "Введите код семьи (кнопка ниже)"
-      : "ПК не настроен");
+    FamilySync.updateSyncStatus("local", "Синхронизация не настроена");
   } else {
-    FamilySync.updateSyncStatus("local", "Введите код семьи (кнопка ниже)");
-    // На APK showModal при старте часто ломает WebView — только в браузере
-    if (window.location.protocol !== "file:") {
-      setTimeout(() => openSyncDialog(), 400);
-    }
+    FamilySync.updateSyncStatus("local", "Ожидание синхронизации…");
   }
 }
 
@@ -1128,15 +1124,23 @@ function openAppDialog(dialog, options = {}) {
 
 const APP_BACK_DIALOGS = [
   elements?.operationDialog,
-  elements?.personDialog,
   elements?.syncDialog,
   elements?.deleteFolderDialog,
   elements?.folderDialog,
   elements?.botOfflineDialog,
   elements?.historyEditDialog,
   elements?.dayHistoryDialog,
-  elements?.bulkListDialog,
 ].filter(Boolean);
+
+function bindDialogBackdropDismiss() {
+  APP_BACK_DIALOGS.forEach((dialog) => {
+    if (!dialog) return;
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      closeAppDialog(dialog);
+    });
+  });
+}
 
 let appBackStackDepth = 0;
 let suppressDialogBackSync = false;
@@ -1321,26 +1325,7 @@ function saveFamilyCode(event) {
 }
 
 function bindSyncDialogOpen() {
-  let lastOpenAt = 0;
-  const open = (event) => {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    const now = Date.now();
-    if (now - lastOpenAt < 400) return;
-    lastOpenAt = now;
-    openSyncDialog();
-  };
-  if (elements.openSyncDialogButton) {
-    elements.openSyncDialogButton.addEventListener("click", open);
-    elements.openSyncDialogButton.addEventListener("touchend", open, { passive: false });
-  }
-  if (elements.syncStatus) {
-    elements.syncStatus.style.cursor = "pointer";
-    elements.syncStatus.addEventListener("click", open);
-    elements.syncStatus.addEventListener("touchend", open, { passive: false });
-  }
+  // Окно «Код семьи» убрано из интерфейса — настройки в telegram-config.js / firebase-config.js
 }
 
 function bindPersonFormEnterNavigation() {
@@ -1363,6 +1348,30 @@ function bindPersonFormEnterNavigation() {
       if (next) next.focus();
     });
   });
+}
+
+function bindPersonFormDraftSaving() {
+  const fields = [
+    elements.personFirstNameInput,
+    elements.personLastNameInput,
+    elements.personBalanceInput,
+    elements.personPhoneInput,
+    elements.personCardNumberInput,
+    elements.personCardDetailsInput,
+    elements.personProfileNoteInput,
+  ].filter(Boolean);
+  const saveIfNew = () => {
+    if (!editingPersonId) savePersonDraft();
+  };
+  fields.forEach((input) => {
+    input.addEventListener("input", saveIfNew);
+  });
+  if (elements.personUseInBotCheckbox) {
+    elements.personUseInBotCheckbox.addEventListener("change", saveIfNew);
+  }
+  if (elements.personFolderPicker) {
+    elements.personFolderPicker.addEventListener("change", saveIfNew);
+  }
 }
 
 function bindEvents() {
@@ -1391,6 +1400,7 @@ function bindEvents() {
   elements.cancelPersonButton.addEventListener("click", () => closePersonView());
   elements.personForm.addEventListener("submit", savePerson);
   bindPersonFormEnterNavigation();
+  bindPersonFormDraftSaving();
   if (elements.personCardNumberInput) {
     elements.personCardNumberInput.addEventListener("input", handleCardNumberInput);
   }
@@ -1413,10 +1423,6 @@ function bindEvents() {
     elements.allFiltersToggle.addEventListener("click", toggleAllFiltersPanel);
   }
   elements.deletePersonButton.addEventListener("click", deleteEditingPerson);
-  if (elements.openSyncFromPersonButton) {
-    elements.openSyncFromPersonButton.addEventListener("click", openSyncDialog);
-  }
-
   elements.clearHistoryButton.addEventListener("click", clearHistory);
   if (elements.nextMonthButton) {
     elements.nextMonthButton.addEventListener("click", nextMonthArchive);
@@ -1497,6 +1503,7 @@ function bindEvents() {
     elements.cancelDayHistoryButton.addEventListener("click", () => closeAppDialog(elements.dayHistoryDialog));
   }
   bindBulkListEvents();
+  bindDialogBackdropDismiss();
   if (elements.commentFilter) {
     elements.commentFilter.addEventListener("input", renderHistory);
   }
@@ -2467,22 +2474,124 @@ function toggleDetailsView() {
 
 function goToMainView() {
   if (activeView === "main") return;
+  if (activeView === "bulk") saveBulkDraft();
+  if (activeView === "person" && !editingPersonId) savePersonDraft();
   activeView = "main";
   updateViewMode();
   popAppBackHistoryWithBrowser();
 }
 
+function saveBulkDraft() {
+  if (!elements.bulkListInput) return;
+  try {
+    localStorage.setItem(BULK_DRAFT_KEY, elements.bulkListInput.value || "");
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function loadBulkDraft() {
+  if (!elements.bulkListInput) return;
+  try {
+    elements.bulkListInput.value = localStorage.getItem(BULK_DRAFT_KEY) || "";
+  } catch {
+    elements.bulkListInput.value = "";
+  }
+}
+
+function clearBulkDraft() {
+  try {
+    localStorage.removeItem(BULK_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+  if (elements.bulkListInput) elements.bulkListInput.value = "";
+}
+
+function collectPersonFormDraft() {
+  return {
+    firstName: elements.personFirstNameInput?.value ?? "",
+    lastName: elements.personLastNameInput?.value ?? "",
+    balance: elements.personBalanceInput?.value ?? "",
+    phone: elements.personPhoneInput?.value ?? "",
+    cardNumber: elements.personCardNumberInput?.value ?? "",
+    cardDetails: elements.personCardDetailsInput?.value ?? "",
+    profileNote: elements.personProfileNoteInput?.value ?? "",
+    cardTint: getSelectedCardTint(),
+    folderIds: [...(elements.personFolderPicker?.querySelectorAll("input:checked") ?? [])]
+      .map((input) => input.value),
+    useInBot: Boolean(elements.personUseInBotCheckbox?.checked),
+  };
+}
+
+function savePersonDraft() {
+  if (editingPersonId) return;
+  try {
+    localStorage.setItem(PERSON_DRAFT_KEY, JSON.stringify(collectPersonFormDraft()));
+  } catch {
+    // ignore
+  }
+}
+
+function loadPersonDraft() {
+  try {
+    const raw = localStorage.getItem(PERSON_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPersonDraft() {
+  try {
+    localStorage.removeItem(PERSON_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function applyPersonDraft(draft) {
+  if (!draft) return;
+  elements.personFirstNameInput.value = draft.firstName ?? "";
+  elements.personLastNameInput.value = draft.lastName ?? "";
+  elements.personBalanceInput.value = draft.balance ?? "";
+  elements.personPhoneInput.value = draft.phone ?? "";
+  elements.personCardNumberInput.value = draft.cardNumber ?? "";
+  elements.personCardDetailsInput.value = draft.cardDetails ?? "";
+  elements.personProfileNoteInput.value = draft.profileNote ?? "";
+  if (elements.personUseInBotCheckbox) {
+    elements.personUseInBotCheckbox.checked = Boolean(draft.useInBot);
+  }
+  renderCardTintPicker(draft.cardTint ?? "");
+  renderFolderPicker(draft.folderIds ?? []);
+}
+
 function updateViewMode() {
+  if (activeView !== "bulk" && elements.bulkListView && !elements.bulkListView.hidden) {
+    saveBulkDraft();
+  }
+  if (activeView !== "person" && elements.personView && !elements.personView.hidden && !editingPersonId) {
+    savePersonDraft();
+  }
   elements.mainView.hidden = activeView !== "main";
   elements.detailsView.hidden = activeView !== "details";
   elements.historyView.hidden = activeView !== "history";
   if (elements.personView) {
     elements.personView.hidden = activeView !== "person";
   }
+  if (elements.bulkListView) {
+    elements.bulkListView.hidden = activeView !== "bulk";
+  }
   elements.historyToggleButton.classList.toggle("active", activeView === "history");
   elements.detailsToggleButton.classList.toggle("active", activeView === "details");
   if (elements.homeButton) {
     elements.homeButton.classList.toggle("active", activeView === "main");
+  }
+  if (elements.addListButton) {
+    elements.addListButton.classList.toggle("active", activeView === "bulk");
+  }
+  if (elements.addPersonButton) {
+    elements.addPersonButton.classList.toggle("active", activeView === "person");
   }
   if (activeView === "history") {
     renderHistory();
@@ -3789,17 +3898,30 @@ function matchPeopleForQuery(query) {
   return fullMatches.length ? fullMatches : scored;
 }
 
-function openBulkListDialog() {
+function openBulkListView() {
   bulkParsedLines = [];
-  if (elements.bulkListInput) elements.bulkListInput.value = "";
+  loadBulkDraft();
   if (elements.bulkStepInput) elements.bulkStepInput.hidden = false;
   if (elements.bulkStepMatch) elements.bulkStepMatch.hidden = true;
   if (elements.bulkMatchList) elements.bulkMatchList.innerHTML = "";
-  openAppDialog(elements.bulkListDialog, { initialFocus: elements.bulkListInput });
+  blurActiveInput();
+  if (activeView === "bulk") return;
+  activeView = "bulk";
+  updateViewMode();
+  pushAppBackHistory();
+  try { window.scrollTo({ top: 0 }); } catch { /* noop */ }
 }
 
-function closeBulkListDialog() {
-  closeAppDialog(elements.bulkListDialog);
+function closeBulkListView() {
+  saveBulkDraft();
+  if (activeView !== "bulk") {
+    activeView = "main";
+    updateViewMode();
+    return;
+  }
+  activeView = "main";
+  updateViewMode();
+  popAppBackHistoryWithBrowser();
 }
 
 function recognizeBulkList() {
@@ -3825,6 +3947,7 @@ function recognizeBulkList() {
   renderBulkMatchList();
   if (elements.bulkStepInput) elements.bulkStepInput.hidden = true;
   if (elements.bulkStepMatch) elements.bulkStepMatch.hidden = false;
+  saveBulkDraft();
 }
 
 function renderBulkMatchList() {
@@ -3949,7 +4072,8 @@ function applyBulkList(type) {
   });
 
   saveState({ immediatePush: true });
-  closeBulkListDialog();
+  clearBulkDraft();
+  closeBulkListView();
   render();
 }
 
@@ -3958,7 +4082,10 @@ function bindBulkListEvents() {
     elements.bulkListForm.addEventListener("submit", (event) => event.preventDefault());
   }
   if (elements.addListButton) {
-    elements.addListButton.addEventListener("click", openBulkListDialog);
+    elements.addListButton.addEventListener("click", openBulkListView);
+  }
+  if (elements.bulkListInput) {
+    elements.bulkListInput.addEventListener("input", saveBulkDraft);
   }
   if (elements.bulkRecognizeButton) {
     elements.bulkRecognizeButton.addEventListener("click", recognizeBulkList);
@@ -3967,13 +4094,14 @@ function bindBulkListEvents() {
     elements.bulkBackButton.addEventListener("click", () => {
       if (elements.bulkStepMatch) elements.bulkStepMatch.hidden = true;
       if (elements.bulkStepInput) elements.bulkStepInput.hidden = false;
+      saveBulkDraft();
     });
   }
   if (elements.cancelBulkListButton) {
-    elements.cancelBulkListButton.addEventListener("click", closeBulkListDialog);
+    elements.cancelBulkListButton.addEventListener("click", closeBulkListView);
   }
   if (elements.bulkCancelButton2) {
-    elements.bulkCancelButton2.addEventListener("click", closeBulkListDialog);
+    elements.bulkCancelButton2.addEventListener("click", closeBulkListView);
   }
   if (elements.bulkMatchList) {
     elements.bulkMatchList.addEventListener("change", handleBulkMatchChange);
@@ -4053,19 +4181,37 @@ function openPersonDialog(person = null) {
   editingPersonId = person?.id ?? null;
   phoneAutoPrefixSuppressed = false;
   elements.personDialogTitle.textContent = person ? "Изменить карту" : "Добавить карту";
-  elements.personFirstNameInput.value = person?.firstName ?? "";
-  elements.personLastNameInput.value = person?.lastName ?? "";
-  elements.personBalanceInput.value = person ? String(person.balance) : "";
-  elements.personPhoneInput.value = person?.phone ?? "";
-  elements.personCardNumberInput.value = formatCardNumberForInput(person?.cardNumber ?? "");
-  elements.personCardDetailsInput.value = formatCardDetailsForInput(person?.cardDetails ?? "");
-  elements.personProfileNoteInput.value = person?.profileNote ?? "";
-  if (elements.personUseInBotCheckbox) {
-    elements.personUseInBotCheckbox.checked = person ? getBotDisplayInBot(person) : false;
+  if (person) {
+    elements.personFirstNameInput.value = person.firstName ?? "";
+    elements.personLastNameInput.value = person.lastName ?? "";
+    elements.personBalanceInput.value = String(person.balance);
+    elements.personPhoneInput.value = person.phone ?? "";
+    elements.personCardNumberInput.value = formatCardNumberForInput(person.cardNumber ?? "");
+    elements.personCardDetailsInput.value = formatCardDetailsForInput(person.cardDetails ?? "");
+    elements.personProfileNoteInput.value = person.profileNote ?? "";
+    if (elements.personUseInBotCheckbox) {
+      elements.personUseInBotCheckbox.checked = getBotDisplayInBot(person);
+    }
+    renderCardTintPicker(person.cardTint ?? "");
+    renderFolderPicker(person.folderIds ?? []);
+  } else {
+    const draft = loadPersonDraft();
+    if (draft) {
+      applyPersonDraft(draft);
+    } else {
+      elements.personFirstNameInput.value = "";
+      elements.personLastNameInput.value = "";
+      elements.personBalanceInput.value = "";
+      elements.personPhoneInput.value = "";
+      elements.personCardNumberInput.value = "";
+      elements.personCardDetailsInput.value = "";
+      elements.personProfileNoteInput.value = "";
+      if (elements.personUseInBotCheckbox) elements.personUseInBotCheckbox.checked = false;
+      renderCardTintPicker("");
+      renderFolderPicker([]);
+    }
   }
   elements.deletePersonButton.hidden = !person;
-  renderCardTintPicker(person?.cardTint ?? "");
-  renderFolderPicker(person?.folderIds ?? []);
   openPersonView();
 }
 
@@ -4078,6 +4224,7 @@ function openPersonView() {
 }
 
 function closePersonView() {
+  if (!editingPersonId) savePersonDraft();
   if (activeView !== "person") {
     activeView = "main";
     updateViewMode();
@@ -4112,6 +4259,7 @@ function renderCardTintPicker(selectedTint = "") {
         item.classList.toggle("active", isActive);
         item.setAttribute("aria-pressed", isActive ? "true" : "false");
       });
+      if (!editingPersonId) savePersonDraft();
     });
     picker.append(button);
   });
@@ -4230,6 +4378,7 @@ function savePerson(event) {
   activateFiltersForPerson(savedPerson, { isNew: !editingPersonId });
 
   saveState({ immediatePush: true });
+  if (!editingPersonId) clearPersonDraft();
   closePersonView();
   render();
 
@@ -4406,8 +4555,12 @@ function openOperationDialog(person) {
     amount: 0,
   };
 
-  elements.operationPerson.textContent = person.name;
-  elements.operationTitle.textContent = "Действие";
+  const stats = getPersonStats(person);
+  const statsHtml = formatPersonPurchaseStatsHtml(stats);
+  if (elements.operationTitle) elements.operationTitle.textContent = formatMoney(person.balance);
+  if (elements.operationPerson) elements.operationPerson.textContent = person.name;
+  if (elements.operationStatsTop) elements.operationStatsTop.innerHTML = statsHtml;
+  if (elements.operationStatsBottom) elements.operationStatsBottom.innerHTML = statsHtml;
   elements.operationDialog.classList.remove("is-income");
   if (elements.transferCheckbox) elements.transferCheckbox.checked = false;
   elements.noteInput.value = "";
@@ -4733,7 +4886,7 @@ function confirmOfflineBotSync() {
   const blocked = FamilySync.getSyncBlockedReason?.();
   if (blocked) {
     alert(
-      `${blocked}\n\nОткройте «Код семьи» (строка статуса вверху) и нажмите «Сохранить».`,
+      `${blocked}\n\nПроверьте настройки синхронизации в файлах конфигурации.`,
     );
     return Promise.resolve(false);
   }
