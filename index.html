@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=179">
+    <link rel="stylesheet" href="./styles.css?v=180">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -68,7 +68,7 @@
             <button class="ghost compact" type="button" id="detailsToggleButton">Подробней</button>
             <button class="ghost compact" type="button" id="historyToggleButton">История</button>
             <button class="ghost compact" type="button" id="homeButton">Главное меню</button>
-            <button class="primary compact" type="button" id="addPersonButton">+ Карта</button>
+            <button class="ghost compact" type="button" id="addPersonButton">+ Карта</button>
             <button class="ghost compact" type="button" id="addListButton">+ Список</button>
           </div>
         </section>
@@ -104,35 +104,37 @@
 
         <div id="mainView">
         <section class="card folder-card">
-          <div class="banks-bar">
-            <span class="inline-label">Банки</span>
-            <div class="folder-list folder-list-flow" id="folderList" aria-label="Банки-фильтры"></div>
-            <div class="banks-controls">
-              <span class="single-filter-text">1 фильтр</span>
-              <button class="toggle-chip" type="button" id="singleFilterToggle" aria-label="Только один фильтр">🚫</button>
-              <button class="ghost mini" type="button" id="deleteFolderButton" aria-label="Удалить банк">−</button>
-              <button class="ghost mini" type="button" id="addFolderButton" aria-label="Добавить банк">+</button>
-            </div>
+          <div class="quick-filter-row">
+            <span class="inline-label">Сорт.</span>
+            <select id="peopleSortSelect" class="quick-sort-select" aria-label="Сортировка людей">
+              <option value="manual">Свой</option>
+              <option value="balance-desc">Крупный баланс</option>
+              <option value="balance-asc">Мелкий баланс</option>
+              <option value="purchases-all">Больше покупок (всего)</option>
+              <option value="purchases-since">Больше покупок с пополнения</option>
+            </select>
+            <button class="ghost mini all-filters-toggle" type="button" id="allFiltersToggle" aria-expanded="false">все фильтры ▾</button>
+            <span class="single-filter-text">1 фильтр</span>
+            <button class="toggle-chip" type="button" id="singleFilterToggle" aria-label="Только один фильтр">🚫</button>
+            <button class="ghost mini" type="button" id="deleteFolderButton" aria-label="Удалить банк">−</button>
+            <button class="ghost mini" type="button" id="addFolderButton" aria-label="Добавить банк">+</button>
           </div>
-          <div class="folder-row">
-            <span class="inline-label">Имена</span>
-            <div class="folder-list" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
-          </div>
-          <div class="people-controls">
-            <div class="people-balance-filter">
-              <span class="inline-label">Баланс</span>
-              <input id="balanceMinInput" type="number" inputmode="numeric" step="100" placeholder="от" aria-label="Баланс от">
-              <input id="balanceMaxInput" type="number" inputmode="numeric" step="100" placeholder="до" aria-label="Баланс до">
+
+          <div id="allFiltersPanel" hidden>
+            <div class="banks-bar">
+              <span class="inline-label">Банки</span>
+              <div class="folder-list folder-list-flow" id="folderList" aria-label="Банки-фильтры"></div>
             </div>
-            <div class="people-sort">
-              <span class="inline-label">Сорт.</span>
-              <select id="peopleSortSelect" aria-label="Сортировка людей">
-                <option value="manual">Свой порядок</option>
-                <option value="balance-desc">Крупный баланс</option>
-                <option value="balance-asc">Мелкий баланс</option>
-                <option value="purchases-all">Больше покупок (всего)</option>
-                <option value="purchases-since">Больше покупок с пополнения</option>
-              </select>
+            <div class="folder-row">
+              <span class="inline-label">Имена</span>
+              <div class="folder-list" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
+            </div>
+            <div class="people-controls">
+              <div class="people-balance-filter">
+                <span class="inline-label">Баланс</span>
+                <input id="balanceMinInput" type="number" inputmode="numeric" step="100" placeholder="от" aria-label="Баланс от">
+                <input id="balanceMaxInput" type="number" inputmode="numeric" step="100" placeholder="до" aria-label="Баланс до">
+              </div>
             </div>
           </div>
         </section>
@@ -510,14 +512,14 @@
     </template>
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
-    <script src="server-config.js?v=179" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=179" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=179" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=179" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=179" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=179" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=179" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=179" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=179" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=180" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=180" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=180" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=180" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=180" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=180" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=180" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=180" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=180" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
