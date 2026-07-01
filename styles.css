@@ -235,12 +235,53 @@ dialog {
 .sync-actions-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   min-width: 0;
 }
 
-.sync-code-button {
+.last-db-change {
+  font-size: 0.62rem;
+  color: var(--muted);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42%;
+}
+
+.sync-status {
+  font-size: 0.68rem;
+  color: var(--muted);
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.sync-status[data-status="synced"] {
+  color: #8fd4a8;
+}
+
+.sync-status[data-status="online"] {
+  color: #7eb8ff;
+}
+
+.sync-status[data-status="offline"] {
+  color: #ffd166;
+}
+
+.sync-status[data-status="error"] {
+  color: #ff9f9f;
+}
+
+.app-version {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(169, 180, 199, 0.75);
+}
   width: 100%;
   max-width: 100%;
   min-height: 36px;
@@ -253,23 +294,6 @@ dialog {
   display: none !important;
 }
 
-.sync-status {
-  font-size: 0.68rem;
-  color: var(--muted);
-}
-
-.sync-status[data-status="synced"] {
-  color: #8fd4a8;
-}
-
-.sync-status[data-status="offline"] {
-  color: #ffd166;
-}
-
-.sync-status[data-status="error"] {
-  color: #ff9f9f;
-}
-
 .sync-row .ghost.mini {
   min-height: 36px;
   min-width: 88px;
@@ -277,12 +301,6 @@ dialog {
   touch-action: manipulation;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-}
-
-.app-version {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: rgba(169, 180, 199, 0.75);
 }
 
 .history-comment-filter {
@@ -1006,6 +1024,48 @@ body.person-reorder-lock {
   display: block;
   width: 100%;
   min-width: 0;
+  font-size: 0.58rem;
+  line-height: 1.35;
+}
+
+.person-stats-wrap {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+}
+
+.person-stats-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xfer-indicator {
+  flex-shrink: 0;
+  min-width: 1.1em;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: right;
+}
+
+.xfer-indicator.xfer-ok {
+  color: #8be9a8;
+}
+
+.xfer-indicator.xfer-warn {
+  color: #ffd166;
+}
+
+.xfer-indicator.xfer-bad {
+  color: #ff6b6b;
 }
 
 .mini {
@@ -2344,50 +2404,118 @@ body:not(.android-webview) .top-actions-bar {
 
 .operation-balance-value {
   display: block;
-  margin: 0 0 2px;
-  font-size: 1.45rem;
-  font-weight: 900;
-  color: #f0f4ff;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #9eb0d4;
+  line-height: 1.2;
 }
 
 .operation-person-name {
-  margin: 2px 0 6px;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #e8f0ff;
-  line-height: 1.15;
+  margin: 0 0 4px;
+  font-size: 1.38rem;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.12;
 }
 
 .operation-dialog .op-action {
-  opacity: 0.52;
-  filter: saturate(0.65);
+  opacity: 1;
+  color: #fff;
+}
+
+.operation-dialog .op-action:disabled {
+  opacity: 0.38;
+  filter: saturate(0.5);
 }
 
 .operation-dialog .op-action:not(:disabled):active {
-  opacity: 0.72;
+  transform: scale(0.98);
 }
 
 .operation-dialog .op-action.op-purchase {
-  background: linear-gradient(145deg, rgba(255, 107, 107, 0.55), rgba(226, 59, 59, 0.45));
+  background: linear-gradient(145deg, rgba(255, 107, 107, 0.4), rgba(226, 59, 59, 0.3));
+  filter: saturate(0.68);
 }
 
 .operation-dialog .op-action.op-transfer {
-  background: linear-gradient(145deg, rgba(90, 166, 255, 0.55), rgba(59, 120, 226, 0.45));
+  background: linear-gradient(145deg, rgba(90, 166, 255, 0.4), rgba(59, 120, 226, 0.3));
+  filter: saturate(0.68);
 }
 
 .operation-dialog .op-action.op-income {
-  background: linear-gradient(145deg, rgba(79, 209, 122, 0.55), rgba(43, 168, 90, 0.45));
+  background: linear-gradient(145deg, rgba(79, 209, 122, 0.4), rgba(43, 168, 90, 0.3));
+  filter: saturate(0.68);
+}
+
+.operation-dialog.has-amount .op-action:not(:disabled).op-purchase {
+  background: linear-gradient(145deg, rgba(255, 107, 107, 0.72), rgba(226, 59, 59, 0.62));
+  filter: saturate(0.88);
+}
+
+.operation-dialog.has-amount .op-action:not(:disabled).op-transfer {
+  background: linear-gradient(145deg, rgba(90, 166, 255, 0.72), rgba(59, 120, 226, 0.62));
+  filter: saturate(0.88);
+}
+
+.operation-dialog.has-amount .op-action:not(:disabled).op-income {
+  background: linear-gradient(145deg, rgba(79, 209, 122, 0.72), rgba(43, 168, 90, 0.62));
+  filter: saturate(0.88);
 }
 
 .operation-stats-line {
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   line-height: 1.35;
 }
 
-.operation-stats-bottom {
-  margin-top: 8px;
+.person-history-list {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.xfer-timeline-content {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: #dce6ff;
+}
+
+.day-history-row {
+  cursor: pointer;
+}
+
+.day-history-row:active {
+  opacity: 0.75;
+}
+
+.device-name-footer {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 16px 12px 22px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.22);
+  font-size: 0.62rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.device-name-footer:active {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.history-device {
+  opacity: 0.75;
+  font-size: 0.62rem;
 }
 
 .bulk-view {
