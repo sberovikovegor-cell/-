@@ -187,9 +187,11 @@
     const timer = setTimeout(() => controller.abort(), 15000);
     let res;
     try {
+      // ВАЖНО: без заголовка Content-Type: application/json запрос считается «простым»
+      // и не требует CORS-предзапроса (OPTIONS). Это чинит запись из APK (origin file:// = null).
+      // Firebase всё равно читает тело как JSON.
       res = await fetch(nodeUrl(), {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
@@ -429,6 +431,14 @@
   function pushWithBotExport(localState) { return pushImmediate(localState); }
   function notifyBotExportPending() {}
   function stopPendingBotPoll() {}
+
+  // Код семьи и секрет «зашиты» в telegram-config.js — применяем их всегда при загрузке,
+  // чтобы они не пропадали после перезахода/чистки кэша и совпадали на всех устройствах.
+  (function seedCredentialsFromConfig() {
+    const tg = window.FAMILY_TELEGRAM_CONFIG || {};
+    if (tg.familyCode) setFamilyCode(tg.familyCode);
+    if (tg.syncSecret) setSyncSecret(tg.syncSecret);
+  })();
 
   window.FamilySync = {
     isConfigured,
