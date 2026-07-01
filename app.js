@@ -29,7 +29,7 @@ const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "178";
+const APP_BUILD = "179";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -268,6 +268,7 @@ const elements = {
   detailsPeopleList: document.querySelector("#detailsPeopleList"),
   detailsCopyAll: document.querySelector("#detailsCopyAll"),
   detailsToggleButton: document.querySelector("#detailsToggleButton"),
+  homeButton: document.querySelector("#homeButton"),
   historyView: document.querySelector("#historyView"),
   historyToggleButton: document.querySelector("#historyToggleButton"),
   syncStatus: document.querySelector("#syncStatus"),
@@ -1332,6 +1333,9 @@ function bindEvents() {
   elements.addPersonButton.addEventListener("click", () => openPersonDialog());
   elements.detailsToggleButton.addEventListener("click", toggleDetailsView);
   elements.historyToggleButton.addEventListener("click", toggleHistoryView);
+  if (elements.homeButton) {
+    elements.homeButton.addEventListener("click", goToMainView);
+  }
   bindSyncDialogOpen();
   elements.cancelSyncButton.addEventListener("click", () => closeAppDialog(elements.syncDialog));
   elements.syncForm.addEventListener("submit", saveFamilyCode);
@@ -2363,7 +2367,6 @@ function render(force = false) {
   renderFirstNameFilters();
   renderPeople();
   renderDetailsPeople();
-  renderHistoryTotals();
   renderFilters();
   renderHistory();
 }
@@ -2379,9 +2382,9 @@ function renderHistoryTotals() {
       counts[item.type] += 1;
     }
   });
-  elements.incomeCount.textContent = String(counts.income);
-  elements.purchaseCount.textContent = String(counts.purchase);
-  elements.transferCount.textContent = String(counts.transfer);
+  if (elements.incomeCount) elements.incomeCount.textContent = String(counts.income);
+  if (elements.purchaseCount) elements.purchaseCount.textContent = String(counts.purchase);
+  if (elements.transferCount) elements.transferCount.textContent = String(counts.transfer);
 }
 
 function toggleHistoryView() {
@@ -2406,6 +2409,13 @@ function toggleDetailsView() {
   activeView = "details";
   updateViewMode();
   pushAppBackHistory();
+}
+
+function goToMainView() {
+  if (activeView === "main") return;
+  activeView = "main";
+  updateViewMode();
+  popAppBackHistoryWithBrowser();
 }
 
 function updateViewMode() {
