@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "185";
+const APP_BUILD = "190";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -399,6 +399,16 @@ const elements = {
   xferTimelineTitle: document.querySelector("#xferTimelineTitle"),
   xferTimelineContent: document.querySelector("#xferTimelineContent"),
   cancelXferTimelineButton: document.querySelector("#cancelXferTimelineButton"),
+  personIncomeDialog: document.querySelector("#personIncomeDialog"),
+  personIncomeTitle: document.querySelector("#personIncomeTitle"),
+  personIncomeHint: document.querySelector("#personIncomeHint"),
+  personIncomeList: document.querySelector("#personIncomeList"),
+  cancelPersonIncomeButton: document.querySelector("#cancelPersonIncomeButton"),
+  personMonthSpendDialog: document.querySelector("#personMonthSpendDialog"),
+  personMonthSpendTitle: document.querySelector("#personMonthSpendTitle"),
+  personMonthSpendHint: document.querySelector("#personMonthSpendHint"),
+  personMonthSpendList: document.querySelector("#personMonthSpendList"),
+  cancelPersonMonthSpendButton: document.querySelector("#cancelPersonMonthSpendButton"),
   deviceNameFooter: document.querySelector("#deviceNameFooter"),
   cancelDayHistoryButton: document.querySelector("#cancelDayHistoryButton"),
   bulkListView: document.querySelector("#bulkListView"),
@@ -1208,6 +1218,8 @@ const APP_BACK_DIALOGS = [
   elements?.dayHistoryDialog,
   elements?.personHistoryDialog,
   elements?.xferTimelineDialog,
+  elements?.personIncomeDialog,
+  elements?.personMonthSpendDialog,
 ].filter(Boolean);
 
 function bindDialogBackdropDismiss() {
@@ -1588,6 +1600,12 @@ function bindEvents() {
   }
   if (elements.cancelXferTimelineButton) {
     elements.cancelXferTimelineButton.addEventListener("click", () => closeAppDialog(elements.xferTimelineDialog));
+  }
+  if (elements.cancelPersonIncomeButton) {
+    elements.cancelPersonIncomeButton.addEventListener("click", () => closeAppDialog(elements.personIncomeDialog));
+  }
+  if (elements.cancelPersonMonthSpendButton) {
+    elements.cancelPersonMonthSpendButton.addEventListener("click", () => closeAppDialog(elements.personMonthSpendDialog));
   }
   if (elements.deviceNameFooter) {
     elements.deviceNameFooter.addEventListener("click", promptDeviceRename);
@@ -2778,11 +2796,19 @@ function fillPersonCard(card, person, stats, detailed) {
   }
   renderBotToggleButton(card.querySelector(".bot-toggle"), person);
   const balanceEl = card.querySelector(".person-balance");
-  if (balanceEl) balanceEl.textContent = formatMoney(person.balance);
+  if (balanceEl) balanceEl.textContent = formatMoneyChip(person.balance);
   const incomeEl = card.querySelector(".last-income");
-  if (incomeEl) incomeEl.textContent = formatMoney(stats.lastIncomeAmount);
+  if (incomeEl) incomeEl.textContent = formatMoneyChip(stats.lastIncomeAmount ?? 0);
+  const statsParts = formatPersonPurchaseStatsParts(stats);
+  const statsMainEl = card.querySelector(".person-stats-main");
+  const statsXferEl = card.querySelector(".person-stats-xfer-slot");
   const statsEl = card.querySelector(".person-stats-line");
-  if (statsEl) statsEl.innerHTML = formatPersonPurchaseStatsHtml(stats);
+  if (statsMainEl && statsXferEl) {
+    statsMainEl.innerHTML = statsParts.mainHtml;
+    statsXferEl.innerHTML = statsParts.xferHtml;
+  } else if (statsEl) {
+    statsEl.innerHTML = statsParts.fullHtml;
+  }
   if (detailed) {
     fillPersonDetailsBlock(card, person);
   }
@@ -2829,9 +2855,8 @@ function buildPersonCard(person, stats, detailed) {
       </div>
     </div>
     <div class="person-line person-line-balance">
-      <button type="button" class="person-balance" data-action="history" aria-label="История человека"></button>
-      <span class="row-sep">·</span>
-      <span class="last-income"></span>
+      <button type="button" class="person-balance money-chip" data-action="history" aria-label="История человека"></button>
+      <button type="button" class="last-income money-chip" data-action="last-income-info" aria-label="Последнее пополнение"></button>
       <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
     </div>
     <div class="person-line person-line-stats">
@@ -2847,15 +2872,15 @@ function buildPersonCard(person, stats, detailed) {
         </div>
       </div>
       <div class="person-line person-line-balance">
-        <button type="button" class="person-balance" data-action="history" aria-label="История человека"></button>
-        <span class="row-sep">·</span>
-        <span class="last-income"></span>
+        <button type="button" class="person-balance money-chip" data-action="history" aria-label="История человека"></button>
+        <button type="button" class="last-income money-chip" data-action="last-income-info" aria-label="Последнее пополнение"></button>
         <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
       </div>
       ${topActionsHtml}
-    </div>
-    <div class="person-line person-line-stats">
-      <span class="person-stats-line"></span>
+      <div class="person-line person-line-stats">
+        <span class="person-stats-line person-stats-main"></span>
+        <span class="person-stats-xfer-slot"></span>
+      </div>
     </div>`;
   fillPersonCard(card, person, stats, detailed);
   return card;
@@ -3481,13 +3506,11 @@ function getPersonStats(personId) {
     (item) => item.type === "purchase" && now - item.createdAt <= day7
   );
 
-  const transfersSinceIncome = personHistory
-    .slice(lastIncomeIndex + 1)
-    .filter((item) => item.type === "transfer");
-  const transferIndicator = buildTransferIndicator(
-    transfersSinceIncome.length,
-    purchasesSinceIncome.length,
+  const transferIndicator = computeTransferChainStats(
+    personHistory,
+    lastIncome ? lastIncomeIndex : -1,
   );
+  const monthSpend = getPersonMonthSpendStats(personId);
 
   return {
     personId,
@@ -3505,25 +3528,206 @@ function getPersonStats(personId) {
     purchasesLast7DaysCount: purchasesLast7Days.length,
     purchasesLast7DaysTotal: purchasesLast7Days.reduce((sum, item) => sum + item.amount, 0),
     transferIndicator,
+    monthSpendTotal: monthSpend.total,
+    monthSpendCount: monthSpend.count,
   };
 }
 
-function buildTransferIndicator(transfersCount, purchasesCount) {
-  if (transfersCount <= 0) return null;
-  const diff = transfersCount - purchasesCount;
-  if (purchasesCount > transfersCount) {
+function buildZeroTransferIndicator() {
+  return {
+    displayText: "0",
+    firstColor: "xfer-ok",
+    showPair: false,
+  };
+}
+
+function transferFirstDigitColor(value) {
+  if (value <= 0) return "xfer-ok";
+  if (value === 1) return "xfer-warn";
+  return "xfer-bad";
+}
+
+function transferSecondDigitColor(value) {
+  if (value <= 0) return "xfer-bad";
+  if (value === 1) return "xfer-warn";
+  return "xfer-ok";
+}
+
+function computeTransferChainStats(personHistory, lastIncomeIndex) {
+  const afterIncome = personHistory.slice(lastIncomeIndex + 1);
+  const totalTransfersSinceIncome = afterIncome.filter((item) => item.type === "transfer").length;
+
+  if (totalTransfersSinceIncome === 0) {
+    return buildZeroTransferIndicator();
+  }
+
+  let lastTransferIdx = -1;
+  afterIncome.forEach((item, index) => {
+    if (item.type === "transfer") lastTransferIdx = index;
+  });
+
+  const purchasesSinceLastTransfer = afterIncome
+    .slice(lastTransferIdx + 1)
+    .filter((item) => item.type === "purchase").length;
+
+  let firstDigit;
+  if (purchasesSinceLastTransfer > 0) {
+    firstDigit = totalTransfersSinceIncome;
+  } else {
+    let lastPurchaseIdx = -1;
+    afterIncome.forEach((item, index) => {
+      if (item.type === "purchase") lastPurchaseIdx = index;
+    });
+    firstDigit = afterIncome
+      .slice(lastPurchaseIdx + 1)
+      .filter((item) => item.type === "transfer").length;
+  }
+
+  const firstColor = transferFirstDigitColor(firstDigit);
+
+  if (purchasesSinceLastTransfer > 0) {
+    const secondColor = transferSecondDigitColor(purchasesSinceLastTransfer);
     return {
-      displayText: `${transfersCount}-${purchasesCount}`,
-      colorClass: "xfer-ok",
+      displayText: `${firstDigit}-${purchasesSinceLastTransfer}`,
+      firstColor,
+      secondColor,
+      firstDigit,
+      secondDigit: purchasesSinceLastTransfer,
+      showPair: true,
     };
   }
-  let colorClass = "xfer-ok";
-  if (diff === 1) colorClass = "xfer-warn";
-  else if (diff >= 2) colorClass = "xfer-bad";
+
   return {
-    displayText: String(Math.max(0, diff)),
-    colorClass,
+    displayText: String(firstDigit),
+    firstColor,
+    showPair: false,
   };
+}
+
+function getMonthBounds(atMs = Date.now()) {
+  const start = new Date(atMs);
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  end.setMilliseconds(-1);
+  return { startMs: start.getTime(), endMs: end.getTime() };
+}
+
+function getCurrentMonthLabel() {
+  const label = new Intl.DateTimeFormat("ru-RU", { month: "long" }).format(new Date());
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function getPersonMonthSpendStats(personId) {
+  const { startMs, endMs } = getMonthBounds();
+  const items = state.history.filter((item) => (
+    item.personId === personId
+    && (item.type === "purchase" || item.type === "transfer")
+    && Number(item.createdAt || 0) >= startMs
+    && Number(item.createdAt || 0) <= endMs
+  ));
+  return {
+    total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    count: items.length,
+    items: items.sort((a, b) => b.createdAt - a.createdAt),
+  };
+}
+
+function getPersonMonthIncomeStats(personId) {
+  const { startMs, endMs } = getMonthBounds();
+  const items = state.history.filter((item) => (
+    item.personId === personId
+    && item.type === "income"
+    && Number(item.createdAt || 0) >= startMs
+    && Number(item.createdAt || 0) <= endMs
+  ));
+  return {
+    total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    count: items.length,
+    items: items.sort((a, b) => b.createdAt - a.createdAt),
+  };
+}
+
+function renderMiniHistoryList(container, items, emptyText) {
+  if (!container) return;
+  container.innerHTML = "";
+  if (!items.length) {
+    container.append(createEmptyState(emptyText, ""));
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  items.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "history-item";
+    const isBalanceSet = item.type === "balance_set";
+    const sign = isBalanceSet ? "=" : (item.direction === "plus" ? "+" : "-");
+    const amountText = isBalanceSet ? formatMoney(item.balanceAfter) : formatMoney(item.amount);
+
+    const main = document.createElement("div");
+    main.className = "history-row-main";
+    const nameEl = document.createElement("span");
+    nameEl.className = "history-name";
+    nameEl.textContent = historyTypeLabel(item.type);
+    const amountEl = document.createElement("span");
+    amountEl.className = `history-amount ${item.type}`;
+    amountEl.textContent = `${sign}${amountText}`;
+    main.append(nameEl, amountEl);
+
+    const sub = document.createElement("div");
+    sub.className = "history-row-sub";
+    const dateEl = document.createElement("span");
+    dateEl.textContent = formatDate(item.createdAt);
+    sub.append(dateEl);
+    const deviceLabel = getDeviceLabel(item.deviceId);
+    if (deviceLabel) {
+      const deviceEl = document.createElement("span");
+      deviceEl.className = "history-device";
+      deviceEl.textContent = deviceLabel;
+      sub.append(deviceEl);
+    }
+    row.append(main, sub);
+    if (item.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "history-row-note";
+      noteEl.textContent = item.note;
+      row.append(noteEl);
+    }
+    fragment.append(row);
+  });
+  container.append(fragment);
+}
+
+function openPersonIncomeDialog(person) {
+  if (!person || !elements.personIncomeDialog) return;
+  const month = getCurrentMonthLabel();
+  const data = getPersonMonthIncomeStats(person.id);
+  if (elements.personIncomeTitle) elements.personIncomeTitle.textContent = person.name;
+  if (elements.personIncomeHint) {
+    elements.personIncomeHint.textContent = `Последнее пополнение · пополнения за ${month} (${data.count}) · сумма ${formatMoneyRub(data.total)}`;
+  }
+  renderMiniHistoryList(
+    elements.personIncomeList,
+    data.items,
+    `Пополнений за ${month} пока нет`,
+  );
+  openAppDialog(elements.personIncomeDialog);
+}
+
+function openPersonMonthSpendDialog(person) {
+  if (!person || !elements.personMonthSpendDialog) return;
+  const month = getCurrentMonthLabel();
+  const data = getPersonMonthSpendStats(person.id);
+  if (elements.personMonthSpendTitle) elements.personMonthSpendTitle.textContent = person.name;
+  if (elements.personMonthSpendHint) {
+    elements.personMonthSpendHint.textContent = `Все траты за ${month}: покупки и переводы по этой карте (${data.count} операций) · ${formatMoneyRub(data.total)}`;
+  }
+  renderMiniHistoryList(
+    elements.personMonthSpendList,
+    data.items,
+    `Трат за ${month} пока нет`,
+  );
+  openAppDialog(elements.personMonthSpendDialog);
 }
 
 function buildXferTimeline(personId) {
@@ -3544,7 +3748,7 @@ function buildXferTimeline(personId) {
       currentLine = `+${amount}`;
     } else if (item.type === "transfer") {
       if (currentLine) lines.push(currentLine);
-      currentLine = `---${amount}`;
+      currentLine = `-${amount}`;
     } else if (item.type === "purchase") {
       currentLine += `-${amount}`;
     }
@@ -4336,6 +4540,15 @@ function handlePeopleClick(event) {
     return;
   }
 
+  const monthSpendBtn = event.target.closest('[data-action="month-spend"]');
+  if (monthSpendBtn) {
+    const card = event.target.closest(".person-card");
+    if (!card) return;
+    const person = state.people.find((item) => item.id === card.dataset.personId);
+    if (person) openPersonMonthSpendDialog(person);
+    return;
+  }
+
   const button = event.target.closest("button");
   const card = event.target.closest(".person-card");
   if (!button || !card) return;
@@ -4350,6 +4563,7 @@ function handlePeopleClick(event) {
   if (action === "income") openOperationDialog(person);
   if (action === "expense") openOperationDialog(person);
   if (action === "history") openPersonHistory(person);
+  if (action === "last-income-info") openPersonIncomeDialog(person);
 }
 
 function renderPersonHistoryModal(person) {
@@ -4828,10 +5042,10 @@ function openOperationDialog(person) {
   };
 
   const stats = getPersonStats(person);
-  const statsHtml = formatPersonPurchaseStatsHtml(stats);
+  const statsParts = formatPersonPurchaseStatsParts(stats);
   if (elements.operationTitle) elements.operationTitle.textContent = formatMoney(person.balance);
   if (elements.operationPerson) elements.operationPerson.textContent = person.name;
-  if (elements.operationStatsTop) elements.operationStatsTop.innerHTML = statsHtml;
+  if (elements.operationStatsTop) elements.operationStatsTop.innerHTML = statsParts.mainHtml;
   elements.operationForm?.classList.remove("has-amount");
   elements.operationDialog.classList.remove("is-income");
   if (elements.transferCheckbox) elements.transferCheckbox.checked = false;
@@ -5799,18 +6013,35 @@ function formatPersonPurchaseStats(stats) {
   return `${sincePart} - ${totalPart}`;
 }
 
-function formatPersonPurchaseStatsHtml(stats) {
+function formatPersonPurchaseStatsParts(stats) {
   const count = stats.purchasesCount || 0;
   const cls = count >= 3 ? "stat-num ok" : count >= 1 ? "stat-num warn" : "stat-num";
   const num = (text) => `<span class="${cls}">${text}</span>`;
   const sincePart = `С пополнения ${num(formatMoneyRub(stats.purchasesTotal))} • ${num(formatPurchaseCount(stats.purchasesCount))}`;
   const totalPart = `Всего ${num(formatMoneyRub(stats.purchasesAllTotal))} - ${num(formatPurchaseCount(stats.purchasesAllCount))}`;
   const textPart = `${sincePart} - ${totalPart}`;
-  if (!stats.transferIndicator) {
-    return `<span class="person-stats-text">${textPart}</span>`;
+  const xferHtml = formatTransferIndicatorHtml(stats.transferIndicator);
+  const monthHtml = `<button type="button" class="month-spend-indicator" data-action="month-spend" aria-label="Траты за месяц">${formatMoneyChip(stats.monthSpendTotal || 0)}</button>`;
+  const mainHtml = `<span class="person-stats-wrap"><span class="person-stats-text">${textPart}</span>${monthHtml}</span>`;
+  const fullHtml = `${mainHtml}${xferHtml}`;
+  return { mainHtml, xferHtml, fullHtml };
+}
+
+function formatPersonPurchaseStatsHtml(stats) {
+  return formatPersonPurchaseStatsParts(stats).fullHtml;
+}
+
+function formatTransferIndicatorHtml(ti) {
+  const indicator = ti || buildZeroTransferIndicator();
+  if (indicator.showPair) {
+    return `<button type="button" class="xfer-indicator xfer-indicator-pair" data-action="xfer-timeline" aria-label="Цепочка с пополнения"><span class="${indicator.firstColor}">${indicator.firstDigit}</span><span class="xfer-sep">-</span><span class="${indicator.secondColor}">${indicator.secondDigit}</span></button>`;
   }
-  const ti = stats.transferIndicator;
-  return `<span class="person-stats-wrap"><span class="person-stats-text">${textPart}</span><button type="button" class="xfer-indicator ${ti.colorClass}" data-action="xfer-timeline" aria-label="Цепочка с пополнения">${ti.displayText}</button></span>`;
+  return `<button type="button" class="xfer-indicator ${indicator.firstColor}" data-action="xfer-timeline" aria-label="Цепочка с пополнения">${indicator.displayText}</button>`;
+}
+
+function formatMoneyChip(value) {
+  const amount = Math.max(0, Math.min(99999, Math.round(Number(value || 0))));
+  return formatMoney(amount);
 }
 
 function formatPersonCardLine(person) {
