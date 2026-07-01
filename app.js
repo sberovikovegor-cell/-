@@ -29,7 +29,7 @@ const SESSION_ACTIVE_KEY = "family-counter-session-active";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "180";
+const APP_BUILD = "182";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -315,6 +315,7 @@ const elements = {
   nextMonthButton: document.querySelector("#nextMonthButton"),
   historyPeriodSelect: document.querySelector("#historyPeriodSelect"),
   personDialog: document.querySelector("#personDialog"),
+  personView: document.querySelector("#personView"),
   personForm: document.querySelector("#personForm"),
   personDialogTitle: document.querySelector("#personDialogTitle"),
   personFirstNameInput: document.querySelector("#personFirstNameInput"),
@@ -1196,12 +1197,49 @@ function reconcileUiAfterSystemBack() {
   return false;
 }
 
-function handleAppBackNavigation() {
-  if (!reconcileUiAfterSystemBack()) return false;
-  if (appBackStackDepth > 0) {
-    appBackStackDepth -= 1;
+let mainExitArmed = false;
+let exitHintTimer = null;
+
+function showExitHint() {
+  let el = document.getElementById("appExitHint");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "appExitHint";
+    el.className = "app-exit-hint";
+    document.body.appendChild(el);
   }
+  el.textContent = "Нажмите ещё раз для выхода";
+  el.classList.add("show");
+  clearTimeout(exitHintTimer);
+  exitHintTimer = setTimeout(() => el.classList.remove("show"), 1900);
+}
+
+function armExitOnMain() {
+  if (mainExitArmed) return false;
+  mainExitArmed = true;
+  showExitHint();
+  setTimeout(() => { mainExitArmed = false; }, 2000);
   return true;
+}
+
+function ensureBackSentinel() {
+  try {
+    history.pushState({ fcBack: 1 }, "");
+  } catch {
+    // ignore
+  }
+}
+
+function handleAppBackNavigation() {
+  if (reconcileUiAfterSystemBack()) {
+    if (appBackStackDepth > 0) {
+      appBackStackDepth -= 1;
+    }
+    return true;
+  }
+  // Главный экран: первое «назад» — подсказка, второе за 2 сек — выход.
+  if (armExitOnMain()) return true;
+  return false;
 }
 
 window.handleAppBackNavigation = handleAppBackNavigation;
@@ -1350,7 +1388,7 @@ function bindEvents() {
   if (elements.clearCloudDataButton) {
     elements.clearCloudDataButton.addEventListener("click", () => wipeAllAppData({ pushToCloud: true }));
   }
-  elements.cancelPersonButton.addEventListener("click", () => closeAppDialog(elements.personDialog));
+  elements.cancelPersonButton.addEventListener("click", () => closePersonView());
   elements.personForm.addEventListener("submit", savePerson);
   bindPersonFormEnterNavigation();
   if (elements.personCardNumberInput) {
@@ -1553,13 +1591,24 @@ function bindEvents() {
     elements.installButton.hidden = false;
   });
 
+  // Стартовый «страж» истории, чтобы поймать первое «назад» на главном экране.
+  ensureBackSentinel();
+
   window.addEventListener("popstate", () => {
     appBackStackDepth = Math.max(0, appBackStackDepth - 1);
     if (programmaticBackPops > 0) {
       programmaticBackPops -= 1;
       return;
     }
-    reconcileUiAfterSystemBack();
+    if (reconcileUiAfterSystemBack()) {
+      // Вернулись из диалога/вида — восстановим точку, чтобы «назад» продолжал работать.
+      ensureBackSentinel();
+      return;
+    }
+    // Главный экран: первое «назад» — подсказка (и остаёмся), второе за 2 сек — выход.
+    if (armExitOnMain()) {
+      ensureBackSentinel();
+    }
   });
 
   APP_BACK_DIALOGS.forEach((dialog) => {
@@ -2427,6 +2476,9 @@ function updateViewMode() {
   elements.mainView.hidden = activeView !== "main";
   elements.detailsView.hidden = activeView !== "details";
   elements.historyView.hidden = activeView !== "history";
+  if (elements.personView) {
+    elements.personView.hidden = activeView !== "person";
+  }
   elements.historyToggleButton.classList.toggle("active", activeView === "history");
   elements.detailsToggleButton.classList.toggle("active", activeView === "details");
   if (elements.homeButton) {
@@ -3696,22 +3748,21 @@ function personSearchTokens(person) {
 function parseBulkLine(rawLine) {
   const line = String(rawLine || "").trim();
   if (!line) return null;
-  const match = line.match(/^(.*\S)\s+([\d][\d\s.,]*)$/);
-  let queryPart;
-  let amountPart;
-  if (match) {
-    queryPart = match[1];
-    amountPart = match[2];
-  } else {
-    const tail = line.match(/([\d][\d\s.,]*)\s*$/);
-    if (!tail) return null;
-    amountPart = tail[1];
-    queryPart = line.slice(0, tail.index);
+  // Формат: «имя [фамилия/банк] СУММА [комментарий]». Пример: «виктор цуп 1000 магнит».
+  const tokens = line.split(/\s+/);
+  let amountIdx = -1;
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (/^\d[\d.,]*$/.test(tokens[i])) {
+      amountIdx = i;
+      break;
+    }
   }
-  const amount = parseAmount(amountPart);
-  const query = queryPart.trim();
+  if (amountIdx <= 0) return null; // нет имени перед суммой или нет суммы
+  const query = tokens.slice(0, amountIdx).join(" ").trim();
+  const amount = parseAmount(tokens[amountIdx]);
+  const note = tokens.slice(amountIdx + 1).join(" ").trim();
   if (!query || amount <= 0) return null;
-  return { query, amount };
+  return { query, amount, note };
 }
 
 function matchPeopleForQuery(query) {
@@ -3766,6 +3817,7 @@ function recognizeBulkList() {
       id: `bulk-${idx}`,
       query: line.query,
       amount: line.amount,
+      note: line.note || "",
       candidates,
       selectedPersonIds: unambiguous ? new Set([candidates[0].person.id]) : new Set(),
     };
@@ -3794,6 +3846,13 @@ function renderBulkMatchList() {
     amountEl.textContent = formatMoney(line.amount);
     head.append(queryEl, amountEl);
     block.append(head);
+
+    if (line.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "bulk-line-note";
+      noteEl.textContent = `💬 ${line.note}`;
+      block.append(noteEl);
+    }
 
     if (line.candidates.length === 0) {
       const none = document.createElement("div");
@@ -3848,7 +3907,7 @@ function applyBulkList(type) {
   bulkParsedLines.forEach((line) => {
     line.selectedPersonIds.forEach((personId) => {
       const person = state.people.find((item) => item.id === personId);
-      if (person) ops.push({ personId, amount: line.amount });
+      if (person) ops.push({ personId, amount: line.amount, note: line.note || "" });
     });
   });
   if (ops.length === 0) {
@@ -3883,7 +3942,7 @@ function applyBulkList(type) {
       type,
       amount: op.amount,
       balanceAfter: state.people[idx].balance,
-      note: "",
+      note: op.note || "",
       createdAt: now + index,
       deviceId: getDeviceId(),
     });
@@ -4007,7 +4066,26 @@ function openPersonDialog(person = null) {
   elements.deletePersonButton.hidden = !person;
   renderCardTintPicker(person?.cardTint ?? "");
   renderFolderPicker(person?.folderIds ?? []);
-  openAppDialog(elements.personDialog);
+  openPersonView();
+}
+
+function openPersonView() {
+  if (activeView === "person") return;
+  activeView = "person";
+  updateViewMode();
+  pushAppBackHistory();
+  try { window.scrollTo({ top: 0 }); } catch { /* noop */ }
+}
+
+function closePersonView() {
+  if (activeView !== "person") {
+    activeView = "main";
+    updateViewMode();
+    return;
+  }
+  activeView = "main";
+  updateViewMode();
+  popAppBackHistoryWithBrowser();
 }
 
 function renderCardTintPicker(selectedTint = "") {
@@ -4152,7 +4230,7 @@ function savePerson(event) {
   activateFiltersForPerson(savedPerson, { isNew: !editingPersonId });
 
   saveState({ immediatePush: true });
-  closeAppDialog(elements.personDialog);
+  closePersonView();
   render();
 
   const saved = editingPersonId
@@ -4277,7 +4355,7 @@ function deleteEditingPerson() {
   if (!person) return;
 
   if (deletePerson(person)) {
-    closeAppDialog(elements.personDialog);
+    closePersonView();
   }
 }
 
