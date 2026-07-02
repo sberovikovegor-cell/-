@@ -1092,21 +1092,16 @@ body.person-reorder-lock {
 }
 
 .person-stats-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.5rem;
-  align-items: end;
+  display: flex;
+  align-items: baseline;
   column-gap: 6px;
   width: 100%;
   min-width: 0;
 }
 
 .person-stats-body {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: nowrap;
+  flex: 1 1 auto;
   min-width: 0;
-  white-space: nowrap;
-  overflow: visible;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1120,8 +1115,7 @@ body.person-reorder-lock {
   padding: 0;
   margin: 0;
   cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
+  white-space: normal;
 }
 
 .stats-segment:active {
@@ -1129,43 +1123,27 @@ body.person-reorder-lock {
 }
 
 .stat-amt {
-  display: inline-block;
-  width: 5.35rem;
-  min-width: 5.35rem;
-  max-width: 5.35rem;
-  text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: visible;
 }
 
 .stat-cnt {
-  display: inline-block;
-  width: 1.55rem;
-  min-width: 1.55rem;
-  max-width: 1.55rem;
-  text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .stat-dot {
-  display: inline-block;
-  width: 0.75em;
-  text-align: center;
   opacity: 0.75;
-  flex-shrink: 0;
 }
 
 .person-stats-xfer-fixed {
-  width: 2.5rem;
-  min-width: 2.5rem;
-  max-width: 2.5rem;
-  display: flex;
+  margin-left: auto;
+  display: inline-flex;
   justify-content: flex-end;
-  align-items: flex-end;
-  align-self: flex-end;
-  justify-self: end;
+  align-items: baseline;
+  align-self: baseline;
+  flex-shrink: 0;
+  padding-left: 6px;
 }
 
 .person-stats-xfer-fixed .xfer-indicator {
