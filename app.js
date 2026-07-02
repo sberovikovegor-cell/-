@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "193";
+const APP_BUILD = "194";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -2765,13 +2765,13 @@ function renderTotal() {
   elements.familyPurchaseTotal.textContent = formatMoney(purchaseTotal);
   elements.familyTransferTotal.textContent = formatMoney(transferTotal);
   if (elements.familyPurchaseToday) {
-    elements.familyPurchaseToday.textContent = `${formatMoney(purchaseToday)} ${purchaseTodayCount}`;
+    elements.familyPurchaseToday.textContent = `${formatMoney(purchaseToday)} ● ${purchaseTodayCount}`;
   }
   if (elements.familyIncomeToday) {
-    elements.familyIncomeToday.textContent = `${formatMoney(incomeToday)} ${incomeTodayCount}`;
+    elements.familyIncomeToday.textContent = `${formatMoney(incomeToday)} ● ${incomeTodayCount}`;
   }
   if (elements.familyTransferToday) {
-    elements.familyTransferToday.textContent = `${formatMoney(transferToday)} ${transferTodayCount}`;
+    elements.familyTransferToday.textContent = `${formatMoney(transferToday)} ● ${transferTodayCount}`;
   }
 }
 
@@ -4801,15 +4801,16 @@ function openPersonPurchaseStatsDialog(person, mode) {
   let items = [];
   let hint = "";
   let label = "Покупки";
+  const allTime = getPersonAllTimePurchaseStats(person.id);
+  const allTimeHint = `${formatMoney(allTime.total)}р ● ${allTime.count}шт (траты за всё время)`;
   if (mode === "since") {
     items = getPurchasesSinceLastIncome(person.id);
     label = "С пополнения";
-    hint = "Покупки с момента последнего пополнения.";
+    hint = allTimeHint;
   } else {
     items = getPersonMonthPurchaseStats(person.id).items;
-    const allTime = getPersonAllTimePurchaseStats(person.id);
     label = `За ${getCurrentMonthLabel()}`;
-    hint = `${formatMoney(allTime.total)}р (траты за всё время, ${allTime.count} шт)`;
+    hint = allTimeHint;
   }
   if (elements.personHistoryTitle) elements.personHistoryTitle.textContent = person.name;
   if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = label;
@@ -6219,24 +6220,23 @@ function formatPersonPurchaseStats(stats) {
   return `${sincePart} - ${totalPart}`;
 }
 
-function formatStatAmountCell(value) {
-  const amount = Math.max(0, Math.min(99999, Math.round(Number(value || 0))));
-  return formatMoney(amount);
-}
-
-function formatStatCountCell(count) {
-  const value = Math.max(0, Math.min(99, Math.round(Number(count || 0))));
-  return String(value);
+function statCountColorClass(count) {
+  const value = Number(count || 0);
+  if (value >= 3) return "stat-num ok";
+  if (value >= 1) return "stat-num warn";
+  return "stat-num";
 }
 
 function formatPersonPurchaseStatsParts(stats) {
-  const sinceAmt = formatStatAmountCell(stats.purchasesTotal);
-  const sinceCnt = formatStatCountCell(stats.purchasesCount);
-  const monthAmt = formatStatAmountCell(stats.monthPurchaseTotal);
-  const monthCnt = formatStatCountCell(stats.monthPurchaseCount);
+  const sinceAmt = formatMoney(stats.purchasesTotal);
+  const sinceCnt = Number(stats.purchasesCount || 0);
+  const monthAmt = formatMoney(stats.monthPurchaseTotal);
+  const monthCnt = Number(stats.monthPurchaseCount || 0);
+  const sinceCls = statCountColorClass(sinceCnt);
+  const monthCls = statCountColorClass(monthCnt);
 
-  const sinceBtn = `<button type="button" class="stats-segment stats-segment-since" data-action="stats-since" aria-label="Покупки с пополнения">С пополнения <span class="stat-amt">${sinceAmt}р</span><span class="stat-dot">●</span><span class="stat-cnt">${sinceCnt}шт</span></button>`;
-  const monthBtn = `<button type="button" class="stats-segment stats-segment-month" data-action="stats-month" aria-label="Покупки за месяц"> - всего <span class="stat-amt">${monthAmt}р</span><span class="stat-dot">●</span><span class="stat-cnt">${monthCnt}шт</span></button>`;
+  const sinceBtn = `<button type="button" class="stats-segment stats-segment-since" data-action="stats-since" aria-label="Покупки с пополнения">С пополнения <span class="stat-amt ${sinceCls}">${sinceAmt}р</span> <span class="stat-dot">●</span> <span class="stat-cnt ${sinceCls}">${sinceCnt}шт</span></button>`;
+  const monthBtn = `<button type="button" class="stats-segment stats-segment-month" data-action="stats-month" aria-label="Покупки за месяц"> - всего <span class="stat-amt ${monthCls}">${monthAmt}р</span> <span class="stat-dot">●</span> <span class="stat-cnt ${monthCls}">${monthCnt}шт</span></button>`;
   const xferHtml = formatTransferIndicatorHtml(stats.transferIndicator);
   const rowHtml = `<span class="person-stats-row"><span class="person-stats-body">${sinceBtn}${monthBtn}</span><span class="person-stats-xfer-fixed">${xferHtml}</span></span>`;
   const mainHtml = `С пополнения ${formatMoneyRub(stats.purchasesTotal)} • ${formatPurchaseCount(stats.purchasesCount)} - всего ${formatMoneyRub(stats.monthPurchaseTotal)} • ${stats.monthPurchaseCount} шт`;
