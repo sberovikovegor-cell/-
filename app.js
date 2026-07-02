@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "199";
+const APP_BUILD = "200";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -6457,11 +6457,16 @@ function copyBlockWithName(person, lines) {
 function buildPersonCopyText(mode, person, stats) {
   const firstName = String(person?.firstName ?? "").trim();
   const lastName = String(person?.lastName ?? "").trim();
+  const nameTag = `[${firstName}][${lastName}]`;
   switch (mode) {
-    case "phone":
-      return `телефон [${firstName}] [${lastName}]`;
-    case "card":
-      return `карта [${lastName}]`;
+    case "phone": {
+      const phone = String(person?.phone ?? "").trim();
+      return `${phone} ${nameTag}`.trim();
+    }
+    case "card": {
+      const cardNumber = getCardNumberForBot(person) || String(person?.cardNumber ?? "").trim();
+      return `${cardNumber} ${nameTag}`.trim();
+    }
     case "phone-card":
       return copyBlockWithName(person, [
         person.phone || "—",
