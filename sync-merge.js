@@ -16,11 +16,12 @@
     "botSlotIndex",
   ];
 
-  function mergeHistory(localHistory, remoteHistory, clearedAtMs = 0) {
+  function mergeHistory(localHistory, remoteHistory, clearedAtMs = 0, deletedSet = null) {
     const effectiveClear = Number(clearedAtMs || 0);
     const map = new Map();
     [...(localHistory || []), ...(remoteHistory || [])].forEach((item) => {
       if (!item?.id) return;
+      if (deletedSet && deletedSet.has(item.id)) return;
       if (effectiveClear > 0 && Number(item.createdAt || 0) <= effectiveClear) return;
       const existing = map.get(item.id);
       if (!existing || Number(item.createdAt || 0) > Number(existing.createdAt || 0)) {
@@ -32,7 +33,7 @@
     );
   }
 
-  function mergeHistoryMonths(localMonths, remoteMonths) {
+  function mergeHistoryMonths(localMonths, remoteMonths, deletedSet = null) {
     const map = new Map();
     [...(localMonths || []), ...(remoteMonths || [])].forEach((month) => {
       if (!month || month.index == null) return;
@@ -40,8 +41,8 @@
       if (!Number.isFinite(index) || index < 1) return;
       const existing = map.get(index);
       const mergedEntries = existing
-        ? mergeHistory(existing.history, month.history, 0)
-        : mergeHistory([], month.history, 0);
+        ? mergeHistory(existing.history, month.history, 0, deletedSet)
+        : mergeHistory([], month.history, 0, deletedSet);
       map.set(index, {
         index,
         title: month.title || existing?.title || `Месяц ${index}`,
@@ -320,6 +321,7 @@
         wipedAtMs: Math.max(localWipe, remoteWipe),
         deletedPersonIds: [...new Set([...(local.deletedPersonIds || []), ...(remote.deletedPersonIds || [])])],
         deletedFolderIds: [...new Set([...(local.deletedFolderIds || []), ...(remote.deletedFolderIds || [])])],
+        deletedHistoryIds: [...new Set([...(local.deletedHistoryIds || []), ...(remote.deletedHistoryIds || [])])],
       };
     }
 
@@ -344,8 +346,15 @@
         ...(remoteState?.deletedFolderIds || []),
       ]),
     ].filter(Boolean);
+    const deletedHistoryIds = [
+      ...new Set([
+        ...(localState?.deletedHistoryIds || []),
+        ...(remoteState?.deletedHistoryIds || []),
+      ]),
+    ].filter(Boolean);
     const deletedPersonSet = new Set(deletedPersonIds);
     const deletedFolderSet = new Set(deletedFolderIds);
+    const deletedHistorySet = new Set(deletedHistoryIds);
 
     let folders = mergeFolders(localState?.folders, remoteState?.folders)
       .filter((folder) => !deletedFolderSet.has(folder.id));
@@ -357,11 +366,13 @@
     const historyMonths = mergeHistoryMonths(
       localState?.historyMonths,
       remoteState?.historyMonths,
+      deletedHistorySet,
     );
     const history = mergeHistory(
       localState?.history,
       remoteState?.history,
       historyClearedAtMs,
+      deletedHistorySet,
     );
     const fullHistory = collectAllHistory({
       history,
@@ -442,6 +453,7 @@
       dataEpoch,
       deletedPersonIds,
       deletedFolderIds,
+      deletedHistoryIds,
     };
   }
 
