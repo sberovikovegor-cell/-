@@ -709,16 +709,8 @@ body.person-reorder-lock {
 
 .bot-toggle.pending {
   border-color: #ffd166;
-  color: transparent;
+  color: #ffd166;
   background: rgba(255, 209, 102, 0.14);
-}
-
-.bot-toggle.pending::before {
-  content: "";
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #ffd166;
   animation: bot-toggle-pulse 1.2s ease-in-out infinite;
 }
 
