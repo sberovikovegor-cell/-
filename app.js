@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "195";
+const APP_BUILD = "197";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -456,6 +456,17 @@ function init() {
 function reconcileStaleBotPending() {
   if (!hasBotPendingSync()) return;
 
+  // Firebase: не сбрасываем ожидание по «нет revision» — ждём подтверждения бота.
+  if (isFirebaseSyncMode()) {
+    const pendingAtFb = Number(localStorage.getItem(PENDING_BOT_AT_KEY) || 0);
+    if (pendingAtFb && Date.now() - pendingAtFb > 600000) {
+      resetAllBotPendingUi();
+    } else {
+      startBotAckPolling();
+    }
+    return;
+  }
+
   const pendingRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
   const pendingAt = Number(localStorage.getItem(PENDING_BOT_AT_KEY) || 0);
   const ageMs = pendingAt ? Date.now() - pendingAt : Infinity;
@@ -621,6 +632,7 @@ function initFamilySync() {
   };
 
   FamilySync.onBotExportRemote = handleRemoteBotExport;
+  FamilySync.onBotAckRemote = handleRemoteBotAck;
   FamilySync.onPushComplete = (success) => {
     if (!success) {
       if (FamilySync.updateSyncStatus) {
@@ -2105,6 +2117,8 @@ window.hasLocalAppData = hasLocalAppData;
 window.hasRemoteAppData = hasRemoteAppData;
 
 function reconcileBotPendingFromRemote(normalizedRemote) {
+  // В режиме Firebase подтверждение даёт ТОЛЬКО бот (families_ack), а не облако.
+  if (isFirebaseSyncMode()) return;
   if (!hasBotPendingSync() || !normalizedRemote) return;
   const remoteById = new Map((normalizedRemote.people || []).map((person) => [person.id, person]));
   state.people = state.people.map((person) => {
@@ -5847,6 +5861,11 @@ function waitForPersonBotApplied(personId, timeoutMs = 90000) {
 }
 
 function scheduleBotExportWorker() {
+  // Firebase: канал botExport не используется — подтверждение тянем из families_ack.
+  if (isFirebaseSyncMode()) {
+    startBotAckPolling();
+    return;
+  }
   if (botExportWorkerBusy) return;
   botExportWorkerBusy = true;
   runBotExportWorkerLoop()
@@ -6013,6 +6032,8 @@ function queueBotExportClear(person, options = {}) {
 }
 
 function syncPersonToBot(person) {
+  // Firebase: правки состава/данных бот подхватывает сам из облака (families/{code}).
+  if (isFirebaseSyncMode()) return;
   if (!person?.useInBot) return;
   if (!alertIfBotProfileIncomplete(person)) return;
   if (!canPushBotNow()) {
@@ -6036,6 +6057,11 @@ function syncActivePersonToBot() {
 
 function retryBotExportIfNeeded() {
   if (!hasBotPendingSync()) return;
+
+  if (isFirebaseSyncMode()) {
+    startBotAckPolling();
+    return;
+  }
 
   const pendingRev = Number(localStorage.getItem(PENDING_BOT_REVISION_KEY) || 0);
   const sentRev = Number(localStorage.getItem(BOT_EXPORT_SENT_REVISION_KEY) || 0);
@@ -6064,8 +6090,72 @@ function disablePersonInBot(person) {
   scheduleBotExportWorker();
 }
 
+function isFirebaseSyncMode() {
+  return window.FamilySync?.getSyncMode?.() === "firebase";
+}
+
+let botAckPollTimer = null;
+
+// Короткая серия опросов подтверждения от бота (families_ack) после действия «в боте».
+function startBotAckPolling() {
+  if (!isFirebaseSyncMode()) return;
+  if (botAckPollTimer) return;
+  let attempts = 0;
+  const tick = () => {
+    botAckPollTimer = null;
+    if (!hasBotPendingSync()) return;
+    attempts += 1;
+    if (attempts > 40) return; // ~2 мин и хватит — бот, видимо, недоступен
+    const done = () => {
+      if (hasBotPendingSync()) {
+        botAckPollTimer = setTimeout(tick, 3000);
+      }
+    };
+    if (window.FamilySync?.pullBotAckNow) {
+      FamilySync.pullBotAckNow().catch(() => {}).finally(done);
+    } else {
+      done();
+    }
+  };
+  botAckPollTimer = setTimeout(tick, 1200);
+}
+
+function toggleUseInBotFirebase(person, freshPerson) {
+  const willEnable = !getBotDisplayInBot(person);
+  const personName = String(person.name || "").trim() || "человека";
+  const confirmText = willEnable
+    ? `Включить отправку «${personName}» в бота?`
+    : `Убрать «${personName}» из бота?`;
+  if (!confirm(confirmText)) return;
+  if (willEnable && !alertIfBotProfileIncomplete(freshPerson())) return;
+
+  const now = Date.now();
+  touchPersonUseInBot(person.id, willEnable);
+  // Жёлтый (ожидание): подтверждение придёт только от самого бота (families_ack).
+  state.people = state.people.map((item) => {
+    if (item.id !== person.id) return normalizePerson(item);
+    return normalizePerson({
+      ...item,
+      useInBot: willEnable,
+      botPendingSync: true,
+      botPendingAction: willEnable ? "upsert" : "clear",
+      botPendingAtMs: now,
+    });
+  });
+  localStorage.setItem(PENDING_BOT_AT_KEY, String(now));
+  renderBotPendingBanner();
+  saveState({ immediatePush: true });
+  render();
+  startBotAckPolling();
+}
+
 function toggleUseInBot(person) {
   const freshPerson = () => state.people.find((item) => item.id === person.id) || person;
+
+  if (isFirebaseSyncMode()) {
+    toggleUseInBotFirebase(person, freshPerson);
+    return;
+  }
 
   let willEnable;
   if (person.botPendingSync) {
@@ -6145,6 +6235,60 @@ function toggleUseInBot(person) {
   }
 
   enableInBot();
+}
+
+// Подтверждение от бота через Firebase (families_ack): единственный источник
+// «реально в боте / реально удалён». Зелёный/красный ставим только отсюда.
+function handleRemoteBotAck(ack) {
+  if (!ack || typeof ack !== "object") return;
+  const people = ack.people && typeof ack.people === "object" ? ack.people : {};
+  const ackAtMs = Number(ack.atMs || 0);
+  let changed = false;
+  let confirmedPending = false;
+
+  state.people = state.people.map((person) => {
+    const entry = people[person.id];
+    if (!entry) return person;
+    const inBot = Boolean(entry.inBot);
+    const rawSlot = entry.slot;
+    const slot = rawSlot != null && Number.isFinite(Number(rawSlot)) ? Number(rawSlot) : null;
+
+    // Человек в ожидании: подтверждаем только ответом, который свежее нашего действия.
+    if (person.botPendingSync) {
+      const startedAt = Number(person.botPendingAtMs || 0);
+      if (ackAtMs && startedAt && ackAtMs < startedAt) return person;
+    }
+
+    const next = normalizePerson({
+      ...person,
+      useInBot: inBot,
+      botConfirmedInBot: inBot,
+      botSlotIndex: inBot ? (slot != null ? slot : person.botSlotIndex) : null,
+      botPendingSync: false,
+      botPendingAction: null,
+      botPendingAtMs: null,
+    });
+
+    if (
+      Boolean(person.botConfirmedInBot) !== inBot
+      || person.botPendingSync
+      || (person.botSlotIndex ?? null) !== (next.botSlotIndex ?? null)
+    ) {
+      changed = true;
+      if (person.botPendingSync) confirmedPending = true;
+    }
+    return next;
+  });
+
+  if (!changed) return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!hasBotPendingSync()) {
+    localStorage.removeItem(PENDING_BOT_REVISION_KEY);
+    localStorage.removeItem(PENDING_BOT_AT_KEY);
+  }
+  renderBotPendingBanner();
+  render();
+  if (confirmedPending) showBotSyncSuccessMessage();
 }
 
 function handleRemoteBotExport(botExport) {
@@ -6295,15 +6439,13 @@ function copyBlockWithName(person, lines) {
 }
 
 function buildPersonCopyText(mode, person, stats) {
+  const firstName = String(person?.firstName ?? "").trim();
+  const lastName = String(person?.lastName ?? "").trim();
   switch (mode) {
     case "phone":
-      return copyBlockWithName(person, [person.phone]);
-    case "card": {
-      const cardParts = [];
-      if (person.cardNumber) cardParts.push(person.cardNumber);
-      if (person.cardDetails) cardParts.push(person.cardDetails);
-      return copyBlockWithName(person, cardParts);
-    }
+      return `телефон [${firstName}] [${lastName}]`;
+    case "card":
+      return `карта [${lastName}]`;
     case "phone-card":
       return copyBlockWithName(person, [
         person.phone || "—",
