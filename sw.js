@@ -1,4 +1,4 @@
-const CACHE_NAME = "family-counter-cache-v200";
+const CACHE_NAME = "family-counter-cache-v201";
 const ASSETS = [
   "./",
   "./index.html",
