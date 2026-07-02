@@ -564,7 +564,7 @@ body.person-reorder-lock {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  touch-action: manipulation;
+  touch-action: pan-y;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
   user-select: none;
   -webkit-user-select: none;
@@ -913,9 +913,10 @@ body.person-reorder-lock {
 
 .person-line-stats {
   color: rgba(169, 180, 199, 0.9);
-  font-size: 0.7rem;
-  line-height: 1.2;
+  font-size: 0.62rem;
+  line-height: 1.25;
   width: 100%;
+  overflow: visible;
 }
 
 .person-card-top {
@@ -1091,20 +1092,87 @@ body.person-reorder-lock {
 }
 
 .person-stats-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.5rem;
+  align-items: end;
+  column-gap: 6px;
   width: 100%;
   min-width: 0;
 }
 
 .person-stats-body {
-  flex: 1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
   min-width: 0;
-  white-space: normal;
+  white-space: nowrap;
   overflow: visible;
-  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-segment {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.stats-segment:active {
+  opacity: 0.75;
+}
+
+.stat-amt {
+  display: inline-block;
+  width: 5.35rem;
+  min-width: 5.35rem;
+  max-width: 5.35rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.stat-cnt {
+  display: inline-block;
+  width: 1.55rem;
+  min-width: 1.55rem;
+  max-width: 1.55rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stat-dot {
+  display: inline-block;
+  width: 0.75em;
+  text-align: center;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.person-stats-xfer-fixed {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  max-width: 2.5rem;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  align-self: flex-end;
+  justify-self: end;
+}
+
+.person-stats-xfer-fixed .xfer-indicator {
+  font-size: 0.82rem;
+  min-width: 2rem;
+  margin: 0;
+  padding: 0;
 }
 
 .person-stats-wrap {
