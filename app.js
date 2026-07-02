@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "200";
+const APP_BUILD = "201";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -837,7 +837,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
     if (!remoteMeetsDataEpoch(normalizedRemote)) {
       scheduleOverwriteStaleCloud();
     }
-    render();
+    render(true);
     return;
   }
   applySyncMetaFromRemote(normalizedRemote);
@@ -881,7 +881,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   reconcileFiltersAfterSync();
   reconcileBotPendingFromRemote(normalizedRemote);
   tryConfirmCloudSync(state);
-  render();
+  render(true);
 }
 
 function getDeletedPersonIdsFrom(appState) {
@@ -1873,7 +1873,7 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
   reconcileFiltersAfterSync();
   reconcileBotPendingFromRemote(normalizedRemote);
   tryConfirmCloudSync(state);
-  render();
+  render(true);
 }
 
 function wipeAllAppData(options = {}) {
@@ -2538,14 +2538,38 @@ function renderHistoryPeriodSelect() {
 function stateRenderFingerprint(appState = state) {
   if (!appState) return "";
   const people = (appState.people || [])
-    .map((p) => `${p.id}:${Number(p.balance || 0)}:${p.cardTint || ""}:${Boolean(p.useInBot)}:${Boolean(p.botPendingSync)}:${p.botPendingAction || ""}:${p.botConfirmedInBot}:${p.botSlotIndex ?? ""}`)
+    .map((p) => [
+      p.id,
+      p.firstName || "",
+      p.lastName || "",
+      p.name || "",
+      Number(p.balance || 0),
+      p.phone || "",
+      p.cardNumber || "",
+      p.cardDetails || "",
+      p.profileNote || "",
+      p.cardTint || "",
+      (p.folderIds || []).join("+"),
+      Boolean(p.useInBot),
+      Boolean(p.botPendingSync),
+      p.botPendingAction || "",
+      p.botConfirmedInBot,
+      p.botSlotIndex ?? "",
+    ].join(":"))
     .join("|");
   const historySig = (appState.history || [])
     .map((h) => `${h.id}:${h.type}:${h.amount}:${h.note || ""}:${Number(h.balanceAfter || 0)}`)
     .join("|");
+  const historyMonthsSig = (appState.historyMonths || [])
+    .map((month) => `${month.index}:${(month.history || [])
+      .map((h) => `${h.id}:${h.type}:${h.amount}:${Number(h.balanceAfter || 0)}`)
+      .join(",")}`)
+    .join("|");
   return JSON.stringify({
     people,
     historySig,
+    historyMonthsSig,
+    deletedHistoryIds: (appState.deletedHistoryIds || []).join(","),
     folders: (appState.folders || []).map((f) => `${f.id}:${f.name}`).join(","),
     activeFolderIds: (appState.activeFolderIds || []).join(","),
     activeFirstNames: (appState.activeFirstNames || []).join(","),
@@ -4064,7 +4088,7 @@ function changeHistoryEntryType(entryId, newType) {
   replayBalanceAfterForPerson(entry.personId);
   markLocalEditPending();
   saveState({ immediatePush: true });
-  render();
+  render(true);
 }
 
 function changeHistoryEntryNote(entryId, note) {
@@ -4096,7 +4120,7 @@ function changeHistoryEntryAmount(entryId, rawValue) {
   replayBalanceAfterForPerson(entry.personId);
   markLocalEditPending();
   saveState({ immediatePush: true });
-  render();
+  render(true);
 }
 
 function markHistoryEntryDeleted(entryId) {
@@ -4133,7 +4157,7 @@ function deleteHistoryEntry(entryId) {
   replayBalanceAfterForPerson(personId);
   markLocalEditPending();
   saveState({ immediatePush: true });
-  render();
+  render(true);
 }
 
 function handleHistoryTypeChange(event) {
@@ -4327,7 +4351,7 @@ function saveHistoryEdit() {
   markLocalEditPending();
   saveState({ immediatePush: true });
   closeHistoryEditDialog();
-  render();
+  render(true);
 }
 
 function deleteHistoryEditEntry() {
@@ -4345,7 +4369,7 @@ function deleteHistoryEditEntry() {
     saveState({ immediatePush: true });
   }
   closeHistoryEditDialog();
-  render();
+  render(true);
 }
 
 function toggleHistoryControls() {
@@ -5115,7 +5139,7 @@ function savePerson(event) {
   saveState({ immediatePush: true });
   if (!editingPersonId) clearPersonDraft();
   closePersonView();
-  render();
+  render(true);
 
   const saved = editingPersonId
     ? state.people.find((item) => item.id === editingPersonId)
