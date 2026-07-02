@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "194";
+const APP_BUILD = "195";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -1761,6 +1761,7 @@ function getDefaultState() {
     dataEpoch: requiredEpoch > 0 ? requiredEpoch : 0,
     deletedPersonIds: [],
     deletedFolderIds: [],
+    deletedHistoryIds: [],
     statsMonthKey: "",
     personMonthlyArchives: [],
   };
@@ -2038,6 +2039,9 @@ function normalizeLoadedState(parsed) {
       : [],
     deletedFolderIds: Array.isArray(withTombstones.deletedFolderIds)
       ? withTombstones.deletedFolderIds.filter(Boolean)
+      : [],
+    deletedHistoryIds: Array.isArray(withTombstones.deletedHistoryIds)
+      ? withTombstones.deletedHistoryIds.filter(Boolean)
       : [],
     statsMonthKey: String(withTombstones.statsMonthKey || ""),
     personMonthlyArchives: Array.isArray(withTombstones.personMonthlyArchives)
@@ -4065,6 +4069,14 @@ function changeHistoryEntryAmount(entryId, rawValue) {
   render();
 }
 
+function markHistoryEntryDeleted(entryId) {
+  if (!entryId) return;
+  if (!Array.isArray(state.deletedHistoryIds)) state.deletedHistoryIds = [];
+  if (!state.deletedHistoryIds.includes(entryId)) {
+    state.deletedHistoryIds.push(entryId);
+  }
+}
+
 function removeHistoryEntryById(entryId) {
   let removed = false;
   if (Array.isArray(state.history)) {
@@ -4078,6 +4090,7 @@ function removeHistoryEntryById(entryId) {
     month.history = month.history.filter((entry) => entry.id !== entryId);
     if (month.history.length !== before) removed = true;
   });
+  if (removed) markHistoryEntryDeleted(entryId);
   return removed;
 }
 
