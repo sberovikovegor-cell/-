@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "197";
+const APP_BUILD = "199";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -273,6 +273,7 @@ let bulkParsedLines = [];
 
 const elements = {
   mainView: document.querySelector("#mainView"),
+  peopleFilterCard: document.querySelector("#peopleFilterCard"),
   detailsView: document.querySelector("#detailsView"),
   detailsPeopleList: document.querySelector("#detailsPeopleList"),
   detailsCopyAll: document.querySelector("#detailsCopyAll"),
@@ -2318,8 +2319,10 @@ function renderBotToggleButton(botToggle, person) {
   let ariaLabel = "Не в боте";
   let icon = "\u2715";
   if (pending) {
+    // Во время ожидания всё равно показываем галочку/крестик (по намерению),
+    // чтобы кнопка не выглядела «пропавшей».
     ariaLabel = "Ожидание ответа бота";
-    icon = "";
+    icon = displayInBot ? "\u2713" : "\u2715";
   } else if (displayInBot) {
     ariaLabel = slotLabel ? `В боте ${slotLabel}` : "В боте";
     icon = "\u2713";
@@ -2732,11 +2735,24 @@ function updateViewMode() {
   if (elements.addPersonButton) {
     elements.addPersonButton.classList.toggle("active", activeView === "person");
   }
+  positionPeopleFilterCard();
   if (activeView === "history") {
     renderHistory();
   }
   if (activeView === "details") {
     renderDetailsPeople();
+  }
+}
+
+// Панель фильтров/сортировки одна на всё приложение: показываем её и в главном
+// меню, и в «Подробнее», физически перенося тот же элемент в активный список.
+function positionPeopleFilterCard() {
+  const card = elements.peopleFilterCard;
+  if (!card) return;
+  const target = activeView === "details" ? elements.detailsPeopleList : elements.peopleList;
+  if (!target || !target.parentNode) return;
+  if (card.parentNode !== target.parentNode || card.nextElementSibling !== target) {
+    target.parentNode.insertBefore(card, target);
   }
 }
 
