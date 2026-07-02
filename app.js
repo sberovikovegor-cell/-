@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "191";
+const APP_BUILD = "193";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -52,7 +52,7 @@ const PERSON_BANK_THEMES = [
   { id: "psb", label: "ПСБ", short: "ПС" },
 ];
 const PERSON_BANK_THEME_IDS = new Set(PERSON_BANK_THEMES.map((item) => item.id));
-const PERSON_DRAG_LONG_PRESS_MS = 1000;
+const PERSON_DRAG_LONG_PRESS_MS = 1200;
 const PERSON_DRAG_MOVE_CANCEL_PX = 12;
 
 let coldAppLaunch = false;
@@ -251,6 +251,7 @@ let editingPersonId = null;
 let phoneAutoPrefixSuppressed = false;
 let currentOperation = null;
 let personDragSession = null;
+let suppressPersonCardClickUntil = 0;
 let amountEntryText = "";
 let deferredInstallPrompt = null;
 let activeView = "main";
@@ -333,6 +334,7 @@ const elements = {
   personCardNumberInput: document.querySelector("#personCardNumberInput"),
   personCardDetailsInput: document.querySelector("#personCardDetailsInput"),
   personProfileNoteInput: document.querySelector("#personProfileNoteInput"),
+  personPositionInput: document.querySelector("#personPositionInput"),
   personCardTintPicker: document.querySelector("#personCardTintPicker"),
   personUseInBotCheckbox: document.querySelector("#personUseInBotCheckbox"),
   personFolderPicker: document.querySelector("#personFolderPicker"),
@@ -392,7 +394,9 @@ const elements = {
   dayHistoryLabel: document.querySelector("#dayHistoryLabel"),
   dayHistoryList: document.querySelector("#dayHistoryList"),
   personHistoryDialog: document.querySelector("#personHistoryDialog"),
+  personHistoryLabel: document.querySelector("#personHistoryLabel"),
   personHistoryTitle: document.querySelector("#personHistoryTitle"),
+  personHistoryHint: document.querySelector("#personHistoryHint"),
   personHistoryList: document.querySelector("#personHistoryList"),
   cancelPersonHistoryButton: document.querySelector("#cancelPersonHistoryButton"),
   xferTimelineDialog: document.querySelector("#xferTimelineDialog"),
@@ -1631,7 +1635,8 @@ function bindEvents() {
   });
 
   elements.peopleList.addEventListener("click", handlePeopleClick);
-  bindPeopleDragReorder();
+  bindPeopleDragReorder(elements.peopleList);
+  bindPeopleDragReorder(elements.detailsPeopleList);
   elements.detailsPeopleList.addEventListener("click", handleDetailsPeopleClick);
   elements.detailsCopyAll.addEventListener("click", handleDetailsCopyAllClick);
   elements.operationForm.addEventListener("submit", (event) => event.preventDefault());
@@ -1756,6 +1761,8 @@ function getDefaultState() {
     dataEpoch: requiredEpoch > 0 ? requiredEpoch : 0,
     deletedPersonIds: [],
     deletedFolderIds: [],
+    statsMonthKey: "",
+    personMonthlyArchives: [],
   };
 }
 
@@ -2031,6 +2038,14 @@ function normalizeLoadedState(parsed) {
       : [],
     deletedFolderIds: Array.isArray(withTombstones.deletedFolderIds)
       ? withTombstones.deletedFolderIds.filter(Boolean)
+      : [],
+    statsMonthKey: String(withTombstones.statsMonthKey || ""),
+    personMonthlyArchives: Array.isArray(withTombstones.personMonthlyArchives)
+      ? withTombstones.personMonthlyArchives.map((entry) => ({
+        monthKey: String(entry.monthKey || ""),
+        archivedAt: Number(entry.archivedAt || 0),
+        byPerson: entry.byPerson && typeof entry.byPerson === "object" ? { ...entry.byPerson } : {},
+      })).filter((entry) => entry.monthKey)
       : [],
   };
 }
@@ -2521,6 +2536,7 @@ function stateRenderFingerprint(appState = state) {
 let lastRenderFingerprint = "";
 
 function render(force = false) {
+  ensureStatsMonthRollover();
   const fp = stateRenderFingerprint();
   if (!force && fp === lastRenderFingerprint) return;
   lastRenderFingerprint = fp;
@@ -2933,6 +2949,36 @@ function sortPeopleByListOrder(people) {
   return [...people].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 }
 
+function getPersonListPosition(personId) {
+  const index = state.people.findIndex((person) => person.id === personId);
+  return index >= 0 ? index + 1 : state.people.length + 1;
+}
+
+function ensureManualPeopleSort() {
+  if (peopleSortMode === "manual") return;
+  peopleSortMode = "manual";
+  localStorage.setItem(PEOPLE_SORT_KEY, "manual");
+  if (elements.peopleSortSelect) elements.peopleSortSelect.value = "manual";
+}
+
+function reorderPersonToPosition(personId, targetPosition) {
+  const maxPos = state.people.length;
+  if (!maxPos) return;
+  const pos = Math.max(1, Math.min(maxPos, Math.round(Number(targetPosition) || maxPos)));
+  const fromIndex = state.people.findIndex((person) => person.id === personId);
+  if (fromIndex < 0) return;
+  const toIndex = pos - 1;
+  if (fromIndex === toIndex) return;
+  const next = [...state.people];
+  const [person] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, person);
+  state.people = next;
+  ensureManualPeopleSort();
+  const now = Date.now();
+  state.peopleOrderUpdatedAt = now;
+  state.uiUpdatedAt = now;
+}
+
 function resetPersonDragSession(container) {
   if (!personDragSession) return;
   if (personDragSession.timer) clearTimeout(personDragSession.timer);
@@ -2948,7 +2994,7 @@ function resetPersonDragSession(container) {
 
 function handlePersonDragPointerMove(event) {
   if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
-  const container = elements.peopleList;
+  const container = personDragSession.container;
   if (!container) return;
   if (personDragSession.dragging) {
     event.preventDefault();
@@ -2966,10 +3012,11 @@ function handlePersonDragPointerMove(event) {
 
 function handlePersonDragPointerEnd(event) {
   if (!personDragSession || event.pointerId !== personDragSession.pointerId) return;
-  const container = elements.peopleList;
+  const container = personDragSession.container;
   const wasDragging = personDragSession.dragging;
   if (wasDragging && container) {
     commitPeopleOrderFromDom(container);
+    suppressPersonCardClickUntil = Date.now() + 450;
     event.preventDefault();
   }
   resetPersonDragSession(container);
@@ -3000,14 +3047,14 @@ function stopPersonDragDocumentListeners() {
   document.removeEventListener("touchmove", handlePersonDragTouchMove);
 }
 
-function bindPeopleDragReorder() {
-  const container = elements.peopleList;
+function bindPeopleDragReorder(container) {
   if (!container || container.dataset.dragBound === "1") return;
   container.dataset.dragBound = "1";
 
   function onLongPressReady() {
     if (!personDragSession || personDragSession.dragging) return;
     personDragSession.dragging = true;
+    ensureManualPeopleSort();
     if (personDragSession.timer) {
       clearTimeout(personDragSession.timer);
       personDragSession.timer = null;
@@ -3039,10 +3086,6 @@ function bindPeopleDragReorder() {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const card = event.target.closest(".person-card");
     if (!card || !container.contains(card)) return;
-    if (event.target.closest("button, a, input, select, textarea, label")) {
-      resetPersonDragSession(container);
-      return;
-    }
 
     resetPersonDragSession(container);
     startPersonDragDocumentListeners();
@@ -3050,13 +3093,21 @@ function bindPeopleDragReorder() {
     personDragSession = {
       personId: card.dataset.personId,
       card,
+      container,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       dragging: false,
       timer: setTimeout(onLongPressReady, longPressMs),
     };
-  });
+  }, true);
+
+  container.addEventListener("click", (event) => {
+    if (Date.now() < suppressPersonCardClickUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
 }
 
 function updatePersonDragPosition(container, draggedCard, clientY) {
@@ -3111,6 +3162,7 @@ function commitPeopleOrderFromDom(container) {
   const nextOrder = state.people.map((person) => person.id).join("|");
   if (previousOrder === nextOrder) return;
 
+  ensureManualPeopleSort();
   const now = Date.now();
   state.peopleOrderUpdatedAt = now;
   state.uiUpdatedAt = now;
@@ -3508,7 +3560,8 @@ function getPersonStats(personId) {
     personHistory,
     lastIncome ? lastIncomeIndex : -1,
   );
-  const monthSpend = getPersonMonthSpendStats(personId);
+  const monthPurchases = getPersonMonthPurchaseStats(personId);
+  const allTimePurchases = getPersonAllTimePurchaseStats(personId);
 
   return {
     personId,
@@ -3519,6 +3572,10 @@ function getPersonStats(personId) {
     purchasesCount: purchasesSinceIncome.length,
     purchasesAllTotal,
     purchasesAllCount: allPurchases.length,
+    monthPurchaseTotal: monthPurchases.total,
+    monthPurchaseCount: monthPurchases.count,
+    allTimePurchaseTotal: allTimePurchases.total,
+    allTimePurchaseCount: allTimePurchases.count,
     incomesLast3Days,
     incomesLast7Days,
     purchasesLast3DaysCount: purchasesLast3Days.length,
@@ -3526,8 +3583,6 @@ function getPersonStats(personId) {
     purchasesLast7DaysCount: purchasesLast7Days.length,
     purchasesLast7DaysTotal: purchasesLast7Days.reduce((sum, item) => sum + item.amount, 0),
     transferIndicator,
-    monthSpendTotal: monthSpend.total,
-    monthSpendCount: monthSpend.count,
   };
 }
 
@@ -3600,6 +3655,90 @@ function computeTransferChainStats(personHistory, lastIncomeIndex) {
     firstColor,
     showPair: false,
   };
+}
+
+function getMonthKeyFromMs(atMs = Date.now()) {
+  const date = new Date(atMs);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getMonthBoundsFromKey(monthKey) {
+  const [year, month] = String(monthKey || "").split("-").map(Number);
+  if (!year || !month) return getMonthBounds();
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  const end = new Date(year, month, 0, 23, 59, 59, 999);
+  return { startMs: start.getTime(), endMs: end.getTime() };
+}
+
+function collectAllHistoryEntriesFlat() {
+  const items = [...(state.history || [])];
+  (state.historyMonths || []).forEach((month) => {
+    (month.history || []).forEach((item) => items.push(item));
+  });
+  return items;
+}
+
+function getPersonPurchaseStatsForMonth(personId, monthKey) {
+  const { startMs, endMs } = getMonthBoundsFromKey(monthKey);
+  const items = collectAllHistoryEntriesFlat().filter((item) => (
+    item.personId === personId
+    && item.type === "purchase"
+    && Number(item.createdAt || 0) >= startMs
+    && Number(item.createdAt || 0) <= endMs
+  ));
+  return {
+    total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    count: items.length,
+    items: items.sort((a, b) => b.createdAt - a.createdAt),
+  };
+}
+
+function getPersonMonthPurchaseStats(personId) {
+  return getPersonPurchaseStatsForMonth(personId, getMonthKeyFromMs(Date.now()));
+}
+
+function getPersonAllTimePurchaseStats(personId) {
+  const items = collectAllHistoryEntriesFlat().filter((item) => (
+    item.personId === personId && item.type === "purchase"
+  ));
+  return {
+    total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    count: items.length,
+    items: items.sort((a, b) => b.createdAt - a.createdAt),
+  };
+}
+
+function archivePersonMonthStats(monthKey) {
+  if (!monthKey) return;
+  if (!Array.isArray(state.personMonthlyArchives)) state.personMonthlyArchives = [];
+  if (state.personMonthlyArchives.some((entry) => entry.monthKey === monthKey)) return;
+  const byPerson = {};
+  state.people.forEach((person) => {
+    const stats = getPersonPurchaseStatsForMonth(person.id, monthKey);
+    byPerson[person.id] = {
+      purchaseTotal: stats.total,
+      purchaseCount: stats.count,
+    };
+  });
+  state.personMonthlyArchives.push({
+    monthKey,
+    archivedAt: Date.now(),
+    byPerson,
+  });
+}
+
+function ensureStatsMonthRollover() {
+  const currentKey = getMonthKeyFromMs(Date.now());
+  const prevKey = state.statsMonthKey || "";
+  if (!prevKey) {
+    state.statsMonthKey = currentKey;
+    return;
+  }
+  if (prevKey !== currentKey) {
+    archivePersonMonthStats(prevKey);
+    state.statsMonthKey = currentKey;
+    saveState({ skipPush: true });
+  }
 }
 
 function getMonthBounds(atMs = Date.now()) {
@@ -4557,12 +4696,21 @@ function handlePeopleClick(event) {
     return;
   }
 
-  const monthSpendBtn = event.target.closest('[data-action="month-spend"]');
-  if (monthSpendBtn) {
+  const statsSinceBtn = event.target.closest('[data-action="stats-since"]');
+  if (statsSinceBtn) {
     const card = event.target.closest(".person-card");
     if (!card) return;
     const person = state.people.find((item) => item.id === card.dataset.personId);
-    if (person) openPersonMonthSpendDialog(person);
+    if (person) openPersonPurchaseStatsDialog(person, "since");
+    return;
+  }
+
+  const statsMonthBtn = event.target.closest('[data-action="stats-month"]');
+  if (statsMonthBtn) {
+    const card = event.target.closest(".person-card");
+    if (!card) return;
+    const person = state.people.find((item) => item.id === card.dataset.personId);
+    if (person) openPersonPurchaseStatsDialog(person, "month");
     return;
   }
 
@@ -4642,7 +4790,35 @@ function renderPersonHistoryModal(person) {
 
 function openPersonHistory(person) {
   if (!person || !elements.personHistoryDialog) return;
+  if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = "Все операции";
+  if (elements.personHistoryHint) elements.personHistoryHint.textContent = "Полная история по этой карте.";
   renderPersonHistoryModal(person);
+  openAppDialog(elements.personHistoryDialog);
+}
+
+function openPersonPurchaseStatsDialog(person, mode) {
+  if (!person || !elements.personHistoryDialog) return;
+  let items = [];
+  let hint = "";
+  let label = "Покупки";
+  if (mode === "since") {
+    items = getPurchasesSinceLastIncome(person.id);
+    label = "С пополнения";
+    hint = "Покупки с момента последнего пополнения.";
+  } else {
+    items = getPersonMonthPurchaseStats(person.id).items;
+    const allTime = getPersonAllTimePurchaseStats(person.id);
+    label = `За ${getCurrentMonthLabel()}`;
+    hint = `${formatMoney(allTime.total)}р (траты за всё время, ${allTime.count} шт)`;
+  }
+  if (elements.personHistoryTitle) elements.personHistoryTitle.textContent = person.name;
+  if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = label;
+  if (elements.personHistoryHint) elements.personHistoryHint.textContent = hint;
+  renderMiniHistoryList(
+    elements.personHistoryList,
+    items,
+    mode === "since" ? "Покупок с пополнения пока нет" : "Покупок за этот месяц пока нет",
+  );
   openAppDialog(elements.personHistoryDialog);
 }
 
@@ -4696,6 +4872,10 @@ function openPersonDialog(person = null) {
     }
     renderCardTintPicker(person.cardTint ?? "");
     renderFolderPicker(person.folderIds ?? []);
+    if (elements.personPositionInput) {
+      elements.personPositionInput.value = String(getPersonListPosition(person.id));
+      elements.personPositionInput.max = String(Math.max(1, state.people.length));
+    }
   } else {
     const draft = loadPersonDraft();
     if (draft) {
@@ -4711,6 +4891,10 @@ function openPersonDialog(person = null) {
       if (elements.personUseInBotCheckbox) elements.personUseInBotCheckbox.checked = false;
       renderCardTintPicker("");
       renderFolderPicker([]);
+    }
+    if (elements.personPositionInput) {
+      elements.personPositionInput.value = String(state.people.length + 1);
+      elements.personPositionInput.max = String(Math.max(1, state.people.length + 1));
     }
   }
   elements.deletePersonButton.hidden = !person;
@@ -4878,6 +5062,11 @@ function savePerson(event) {
     ? state.people.find((item) => item.id === editingPersonId)
     : state.people[state.people.length - 1];
   activateFiltersForPerson(savedPerson, { isNew: !editingPersonId });
+
+  const savedId = editingPersonId || state.people[state.people.length - 1]?.id;
+  if (savedId && elements.personPositionInput) {
+    reorderPersonToPosition(savedId, elements.personPositionInput.value);
+  }
 
   saveState({ immediatePush: true });
   if (!editingPersonId) clearPersonDraft();
@@ -6030,18 +6219,28 @@ function formatPersonPurchaseStats(stats) {
   return `${sincePart} - ${totalPart}`;
 }
 
+function formatStatAmountCell(value) {
+  const amount = Math.max(0, Math.min(99999, Math.round(Number(value || 0))));
+  return formatMoney(amount);
+}
+
+function formatStatCountCell(count) {
+  const value = Math.max(0, Math.min(99, Math.round(Number(count || 0))));
+  return String(value);
+}
+
 function formatPersonPurchaseStatsParts(stats) {
-  const count = stats.purchasesCount || 0;
-  const cls = count >= 3 ? "stat-num ok" : count >= 1 ? "stat-num warn" : "stat-num";
-  const num = (text) => `<span class="${cls}">${text}</span>`;
-  const monthHtml = `<button type="button" class="month-spend-indicator" data-action="month-spend" aria-label="Траты за месяц">${formatMoneyChip(stats.monthSpendTotal || 0)}</button>`;
-  const sincePart = `С пополнения ${num(formatMoneyRub(stats.purchasesTotal))} • ${num(formatPurchaseCount(stats.purchasesCount))}`;
-  const totalPart = `Всего ${num(formatMoneyRub(stats.purchasesAllTotal))} - ${num(formatPurchaseCount(stats.purchasesAllCount))}`;
-  const bodyHtml = `${sincePart} ${monthHtml} - ${totalPart}`;
+  const sinceAmt = formatStatAmountCell(stats.purchasesTotal);
+  const sinceCnt = formatStatCountCell(stats.purchasesCount);
+  const monthAmt = formatStatAmountCell(stats.monthPurchaseTotal);
+  const monthCnt = formatStatCountCell(stats.monthPurchaseCount);
+
+  const sinceBtn = `<button type="button" class="stats-segment stats-segment-since" data-action="stats-since" aria-label="Покупки с пополнения">С пополнения <span class="stat-amt">${sinceAmt}р</span><span class="stat-dot">●</span><span class="stat-cnt">${sinceCnt}шт</span></button>`;
+  const monthBtn = `<button type="button" class="stats-segment stats-segment-month" data-action="stats-month" aria-label="Покупки за месяц"> - всего <span class="stat-amt">${monthAmt}р</span><span class="stat-dot">●</span><span class="stat-cnt">${monthCnt}шт</span></button>`;
   const xferHtml = formatTransferIndicatorHtml(stats.transferIndicator);
-  const rowHtml = `<span class="person-stats-row"><span class="person-stats-body">${bodyHtml}</span>${xferHtml}</span>`;
-  const mainHtml = `${sincePart} - ${totalPart}`;
-  return { rowHtml, mainHtml, bodyHtml, xferHtml };
+  const rowHtml = `<span class="person-stats-row"><span class="person-stats-body">${sinceBtn}${monthBtn}</span><span class="person-stats-xfer-fixed">${xferHtml}</span></span>`;
+  const mainHtml = `С пополнения ${formatMoneyRub(stats.purchasesTotal)} • ${formatPurchaseCount(stats.purchasesCount)} - всего ${formatMoneyRub(stats.monthPurchaseTotal)} • ${stats.monthPurchaseCount} шт`;
+  return { rowHtml, mainHtml };
 }
 
 function formatPersonPurchaseStatsHtml(stats) {
