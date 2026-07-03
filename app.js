@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "201";
+const APP_BUILD = "203";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -267,6 +267,9 @@ let historyDateToValue = "";
 let historyAmountFromValue = "";
 let historyAmountToValue = "";
 let historyControlsOpen = false;
+let personHistoryDialogPersonId = null;
+let personHistoryDialogMode = "all";
+let personOverviewShowContact = false;
 let editingHistoryEntryId = null;
 let historyEditSelectedType = null;
 let bulkParsedLines = [];
@@ -400,6 +403,15 @@ const elements = {
   personHistoryHint: document.querySelector("#personHistoryHint"),
   personHistoryList: document.querySelector("#personHistoryList"),
   cancelPersonHistoryButton: document.querySelector("#cancelPersonHistoryButton"),
+  personOverviewBalanceRow: document.querySelector("#personOverviewBalanceRow"),
+  personOverviewBalanceInput: document.querySelector("#personOverviewBalanceInput"),
+  savePersonOverviewBalanceButton: document.querySelector("#savePersonOverviewBalanceButton"),
+  personOverviewContact: document.querySelector("#personOverviewContact"),
+  personOverviewPhone: document.querySelector("#personOverviewPhone"),
+  personOverviewCard: document.querySelector("#personOverviewCard"),
+  personOverviewComment: document.querySelector("#personOverviewComment"),
+  personOverviewActions: document.querySelector("#personOverviewActions"),
+  personOverviewActionButton: document.querySelector("#personOverviewActionButton"),
   xferTimelineDialog: document.querySelector("#xferTimelineDialog"),
   xferTimelineTitle: document.querySelector("#xferTimelineTitle"),
   xferTimelineHint: document.querySelector("#xferTimelineHint"),
@@ -1278,6 +1290,11 @@ function popAppBackHistoryWithBrowser() {
 
 function closeAppDialog(dialog) {
   if (!dialog || !dialog.open) return;
+  if (dialog === elements.personHistoryDialog) {
+    personHistoryDialogPersonId = null;
+    personHistoryDialogMode = "all";
+    personOverviewShowContact = false;
+  }
   suppressDialogBackSync = true;
   dialog.close();
   suppressDialogBackSync = false;
@@ -1612,6 +1629,20 @@ function bindEvents() {
   }
   if (elements.cancelPersonHistoryButton) {
     elements.cancelPersonHistoryButton.addEventListener("click", () => closeAppDialog(elements.personHistoryDialog));
+  }
+  if (elements.savePersonOverviewBalanceButton) {
+    elements.savePersonOverviewBalanceButton.addEventListener("click", savePersonOverviewBalance);
+  }
+  if (elements.personOverviewBalanceInput) {
+    elements.personOverviewBalanceInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        savePersonOverviewBalance();
+      }
+    });
+  }
+  if (elements.personOverviewActionButton) {
+    elements.personOverviewActionButton.addEventListener("click", openPersonOverviewAction);
   }
   if (elements.personHistoryList) {
     elements.personHistoryList.addEventListener("click", handleHistoryClick);
@@ -2596,6 +2627,7 @@ function render(force = false) {
   renderFilters();
   renderHistory();
   renderDeviceNameFooter();
+  refreshPersonHistoryDialogIfOpen();
 }
 
 function renderHistoryTotals() {
@@ -2928,7 +2960,7 @@ function buildPersonCard(person, stats, detailed) {
       </div>
     </div>
     <div class="person-line person-line-balance">
-      <button type="button" class="person-balance money-chip" data-action="history" aria-label="История человека"></button>
+      <button type="button" class="person-balance money-chip" data-action="overview" aria-label="Баланс и история"></button>
       <button type="button" class="last-income money-chip" data-action="last-income-info" aria-label="Последнее пополнение"></button>
       <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
     </div>
@@ -2940,12 +2972,12 @@ function buildPersonCard(person, stats, detailed) {
     <div class="person-card-top">
       <div class="person-line person-line-head">
         <div class="person-name">
-          <button type="button" class="person-name-part person-first-name" data-action="edit"></button>
-          <button type="button" class="person-name-part person-last-name" data-action="edit"></button>
+          <button type="button" class="person-name-part person-first-name" data-action="overview-contact"></button>
+          <button type="button" class="person-name-part person-last-name" data-action="overview-contact"></button>
         </div>
       </div>
       <div class="person-line person-line-balance">
-        <button type="button" class="person-balance money-chip" data-action="history" aria-label="История человека"></button>
+        <button type="button" class="person-balance money-chip" data-action="overview" aria-label="Баланс и история"></button>
         <button type="button" class="last-income money-chip" data-action="last-income-info" aria-label="Последнее пополнение"></button>
         <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
       </div>
@@ -3855,6 +3887,7 @@ function renderMiniHistoryList(container, items, emptyText) {
   items.forEach((item) => {
     const row = document.createElement("article");
     row.className = "history-item";
+    if (item.id) row.dataset.historyId = item.id;
     const isBalanceSet = item.type === "balance_set";
     const sign = isBalanceSet ? "=" : (item.direction === "plus" ? "+" : "-");
     const amountText = isBalanceSet ? formatMoney(item.balanceAfter) : formatMoney(item.amount);
@@ -4791,10 +4824,12 @@ function handlePeopleClick(event) {
   const action = button.dataset.action;
   if (action === "bot-toggle") toggleUseInBot(person);
   if (action === "edit") openPersonDialog(person);
+  if (action === "overview") openPersonOverview(person, { showContact: false });
+  if (action === "overview-contact") openPersonOverview(person, { showContact: true });
   if (action === "operation") openOperationDialog(person);
   if (action === "income") openOperationDialog(person);
   if (action === "expense") openOperationDialog(person);
-  if (action === "history") openPersonHistory(person);
+  if (action === "history") openPersonOverview(person, { showContact: false });
   if (action === "last-income-info") openPersonIncomeDialog(person);
 }
 
@@ -4855,15 +4890,7 @@ function renderPersonHistoryModal(person) {
   elements.personHistoryList.append(fragment);
 }
 
-function openPersonHistory(person) {
-  if (!person || !elements.personHistoryDialog) return;
-  if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = "Все операции";
-  if (elements.personHistoryHint) elements.personHistoryHint.textContent = "Полная история по этой карте.";
-  renderPersonHistoryModal(person);
-  openAppDialog(elements.personHistoryDialog);
-}
-
-function openPersonPurchaseStatsDialog(person, mode) {
+function fillPersonPurchaseStatsDialog(person, mode) {
   if (!person || !elements.personHistoryDialog) return;
   let items = [];
   let hint = "";
@@ -4887,6 +4914,123 @@ function openPersonPurchaseStatsDialog(person, mode) {
     items,
     mode === "since" ? "Покупок с пополнения пока нет" : "Покупок за этот месяц пока нет",
   );
+}
+
+function refreshPersonHistoryDialogIfOpen() {
+  const dialog = elements.personHistoryDialog;
+  if (!dialog?.open || !personHistoryDialogPersonId) return;
+  const person = state.people.find((p) => p.id === personHistoryDialogPersonId);
+  if (!person) {
+    if (elements.personHistoryList) {
+      elements.personHistoryList.innerHTML = "";
+      elements.personHistoryList.append(createEmptyState("Карта не найдена", ""));
+    }
+    return;
+  }
+  if (personHistoryDialogMode === "all") {
+    const person = state.people.find((p) => p.id === personHistoryDialogPersonId);
+    if (person) fillPersonOverviewDialog(person);
+    return;
+  }
+  if (personHistoryDialogMode === "since" || personHistoryDialogMode === "month") {
+    fillPersonPurchaseStatsDialog(person, personHistoryDialogMode);
+  }
+}
+
+function setPersonOverviewPanelVisible(visible) {
+  if (elements.personOverviewBalanceRow) elements.personOverviewBalanceRow.hidden = !visible;
+  if (elements.personOverviewActions) elements.personOverviewActions.hidden = !visible;
+  if (elements.personOverviewContact) {
+    elements.personOverviewContact.hidden = !visible || !personOverviewShowContact;
+  }
+}
+
+function fillPersonOverviewContact(person) {
+  const phone = String(person.phone || "").trim();
+  const card = String(person.cardNumber || "").trim();
+  const comment = String(person.profileNote || "").trim();
+  if (elements.personOverviewPhone) {
+    elements.personOverviewPhone.textContent = phone ? `Телефон: ${phone}` : "Телефон: —";
+  }
+  if (elements.personOverviewCard) {
+    elements.personOverviewCard.textContent = card ? `Карта: ${card}` : "Карта: —";
+  }
+  if (elements.personOverviewComment) {
+    elements.personOverviewComment.textContent = comment ? `Комментарий: ${comment}` : "Комментарий: —";
+  }
+}
+
+function fillPersonOverviewDialog(person) {
+  if (!person || !elements.personHistoryDialog) return;
+  if (elements.personHistoryTitle) elements.personHistoryTitle.textContent = person.name;
+  if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = "Карта";
+  if (elements.personHistoryHint) {
+    elements.personHistoryHint.textContent = personOverviewShowContact
+      ? "Можно изменить баланс и посмотреть историю."
+      : "Можно изменить актуальный баланс и посмотреть историю.";
+  }
+  if (elements.personOverviewBalanceInput) {
+    elements.personOverviewBalanceInput.value = String(person.balance ?? 0);
+  }
+  setPersonOverviewPanelVisible(true);
+  if (personOverviewShowContact) {
+    fillPersonOverviewContact(person);
+  }
+  renderPersonHistoryModal(person);
+}
+
+function savePersonOverviewBalance() {
+  const personId = personHistoryDialogPersonId;
+  if (!personId) return;
+  const person = state.people.find((item) => item.id === personId);
+  if (!person) return;
+  const balance = parseAmount(elements.personOverviewBalanceInput?.value);
+  if (balance < 0) {
+    alert("Баланс не может быть меньше нуля.");
+    return;
+  }
+  if (balance === Number(person.balance || 0)) return;
+
+  markLocalEditPending();
+  const now = Date.now();
+  state.people = state.people.map((item) => {
+    if (item.id !== personId) return item;
+    const updated = touchPersonBalanceField({ ...item, balance }, now);
+    delete updated.balanceManualAt;
+    return updated;
+  });
+  applyManualBalanceCorrection(personId, person.name, balance, now);
+  saveState({ immediatePush: true });
+  render(true);
+  const refreshed = state.people.find((item) => item.id === personId);
+  if (refreshed && elements.personOverviewBalanceInput) {
+    elements.personOverviewBalanceInput.value = String(refreshed.balance ?? 0);
+  }
+}
+
+function openPersonOverviewAction() {
+  const person = state.people.find((item) => item.id === personHistoryDialogPersonId);
+  if (!person) return;
+  closeAppDialog(elements.personHistoryDialog);
+  openOperationDialog(person);
+}
+
+function openPersonOverview(person, { showContact = false } = {}) {
+  if (!person || !elements.personHistoryDialog) return;
+  personHistoryDialogPersonId = person.id;
+  personHistoryDialogMode = "all";
+  personOverviewShowContact = showContact;
+  fillPersonOverviewDialog(person);
+  openAppDialog(elements.personHistoryDialog);
+}
+
+function openPersonPurchaseStatsDialog(person, mode) {
+  if (!person || !elements.personHistoryDialog) return;
+  personHistoryDialogPersonId = person.id;
+  personHistoryDialogMode = mode;
+  personOverviewShowContact = false;
+  setPersonOverviewPanelVisible(false);
+  fillPersonPurchaseStatsDialog(person, mode);
   openAppDialog(elements.personHistoryDialog);
 }
 
