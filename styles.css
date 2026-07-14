@@ -1286,13 +1286,6 @@ body.person-reorder-lock {
   border: 1px solid var(--line);
 }
 
-.person-overview-contact-line {
-  font-size: 0.82rem;
-  line-height: 1.35;
-  color: var(--muted);
-  word-break: break-word;
-}
-
 .person-overview-actions {
   margin-top: 10px;
 }
@@ -2563,9 +2556,9 @@ body:not(.android-webview) .top-actions-bar {
 }
 
 .quick-sort-select {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 130px;
+  max-width: none;
   min-height: 30px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -2672,7 +2665,17 @@ body:not(.android-webview) .top-actions-bar {
   line-height: 1.12;
 }
 
+.operation-dialog .operation-action-grid {
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+
 .operation-dialog .op-action {
+  min-height: 36px;
+  border-radius: 11px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0 6px;
   opacity: 1;
   color: #fff;
 }
@@ -2761,6 +2764,98 @@ body:not(.android-webview) .top-actions-bar {
   caret-color: var(--text);
 }
 
+body.dialog-open-lock {
+  overflow: hidden;
+  touch-action: none;
+}
+
+body.dialog-open-lock .app {
+  overflow: hidden;
+}
+
+.filter-expand-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.filter-expand-row .folder-list {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-list-collapsed:not(.is-expanded) {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-height: 30px;
+}
+
+.filter-list-collapsed.is-expanded {
+  flex-wrap: wrap;
+  overflow: visible;
+  max-height: none;
+}
+
+.filter-expand-toggle {
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  line-height: 1;
+}
+
+.folder-card .people-balance-filter {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.person-overview-contact-line {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
+  word-break: break-word;
+  cursor: pointer;
+}
+
+.person-overview-contact-line:not(:disabled):active {
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.person-overview-contact-line:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.person-mini-dialog .person-history-list,
+.operation-history-list {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.operation-dialog .operation-sum-field {
+  margin: 0;
+}
+
+.operation-dialog .operation-comment-field {
+  margin: 2px 0 4px;
+}
+
+.operation-dialog .operation-comment-field input {
+  max-width: 14em;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
 .operation-history-block {
   margin-top: 10px;
   padding-top: 10px;
@@ -2775,7 +2870,7 @@ body:not(.android-webview) .top-actions-bar {
 }
 
 .operation-history-list {
-  max-height: min(36vh, 280px);
+  max-height: min(42vh, 320px);
   overflow-y: auto;
 }
 
