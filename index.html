@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=203">
+    <link rel="stylesheet" href="./styles.css?v=205">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -361,11 +361,23 @@
         <div class="section-title operation-head">
           <div class="operation-head-main">
             <h2 class="operation-person-name" id="operationPerson">Имя</h2>
-            <span class="operation-balance-value" id="operationTitle">0</span>
             <div class="operation-stats-line person-stats-line" id="operationStatsTop"></div>
           </div>
           <button class="ghost" type="button" id="cancelOperationButton">Выйти</button>
         </div>
+
+        <label class="amount-preview amount-preview-input operation-balance-field">
+          <span>Баланс</span>
+          <input
+            id="operationBalanceInput"
+            type="text"
+            inputmode="decimal"
+            enterkeyhint="done"
+            autocomplete="off"
+            placeholder="0"
+            aria-label="Баланс карты"
+          >
+        </label>
 
         <label class="amount-preview amount-preview-input">
           <span>Сумма</span>
@@ -391,10 +403,11 @@
           <button type="button" class="op-action op-income" data-op="income">Пополнение</button>
         </div>
 
-        <div class="dialog-actions operation-dialog-actions">
-          <button class="ghost" type="button" id="exitOperationButton">Выйти</button>
-          <button class="danger" type="button" id="resetAmountButton">Сбросить</button>
+        <div class="operation-history-block">
+          <span class="inline-label">История</span>
+          <div class="person-history-list operation-history-list" id="operationHistoryList" aria-label="История по карте"></div>
         </div>
+
         <input type="checkbox" id="transferCheckbox" hidden>
         <button type="submit" id="confirmOperationButton" hidden aria-hidden="true"></button>
       </form>
@@ -588,14 +601,14 @@
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
     <button type="button" class="device-name-footer" id="deviceNameFooter" aria-label="Название устройства"></button>
-    <script src="server-config.js?v=203" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=203" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=203" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=203" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=203" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=203" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=203" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=203" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=203" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=205" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=205" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=205" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=205" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=205" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=205" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=205" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=205" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=205" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
