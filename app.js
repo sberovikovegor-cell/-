@@ -32,13 +32,35 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "208";
+const APP_BUILD = "215";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
 const ACTIVE_FOLDER_IDS_KEY = "family-counter-active-folder-ids-local";
 const ACTIVE_FIRST_NAMES_KEY = "family-counter-active-first-names-local";
 const SINGLE_FILTER_MODE_KEY = "family-counter-single-filter-mode-local";
+const DETAILS_ACTIVE_FOLDER_IDS_KEY = "family-counter-details-active-folder-ids-local";
+const DETAILS_ACTIVE_FIRST_NAMES_KEY = "family-counter-details-active-first-names-local";
+const DETAILS_SINGLE_FILTER_MODE_KEY = "family-counter-details-single-filter-mode-local";
+const DETAILS_BALANCE_MIN_KEY = "family-counter-details-people-balance-min";
+const DETAILS_BALANCE_MAX_KEY = "family-counter-details-people-balance-max";
+
+const FILTER_VIEW_STORAGE = {
+  main: {
+    folderIds: ACTIVE_FOLDER_IDS_KEY,
+    firstNames: ACTIVE_FIRST_NAMES_KEY,
+    singleMode: SINGLE_FILTER_MODE_KEY,
+    balanceMin: PEOPLE_BALANCE_MIN_KEY,
+    balanceMax: PEOPLE_BALANCE_MAX_KEY,
+  },
+  details: {
+    folderIds: DETAILS_ACTIVE_FOLDER_IDS_KEY,
+    firstNames: DETAILS_ACTIVE_FIRST_NAMES_KEY,
+    singleMode: DETAILS_SINGLE_FILTER_MODE_KEY,
+    balanceMin: DETAILS_BALANCE_MIN_KEY,
+    balanceMax: DETAILS_BALANCE_MAX_KEY,
+  },
+};
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -275,6 +297,7 @@ let activeHistoryPeriod = null;
 let botSuccessTimer = null;
 let botExportWorkerBusy = false;
 let filtersAutoCleared = false;
+let lastFilterView = "main";
 let peopleSortMode = localStorage.getItem(PEOPLE_SORT_KEY) || "manual";
 let balanceFilterMin = localStorage.getItem(PEOPLE_BALANCE_MIN_KEY) || "";
 let balanceFilterMax = localStorage.getItem(PEOPLE_BALANCE_MAX_KEY) || "";
@@ -286,6 +309,7 @@ let historyControlsOpen = false;
 let personHistoryDialogPersonId = null;
 let personHistoryDialogMode = "all";
 let personOverviewShowContact = false;
+let personViewReturnView = "main";
 let editingHistoryEntryId = null;
 let historyEditSelectedType = null;
 let bulkParsedLines = [];
@@ -336,8 +360,9 @@ const elements = {
   addFolderButton: document.querySelector("#addFolderButton"),
   deleteFolderButton: document.querySelector("#deleteFolderButton"),
   singleFilterToggle: document.querySelector("#singleFilterToggle"),
-  allFiltersToggle: document.querySelector("#allFiltersToggle"),
-  allFiltersPanel: document.querySelector("#allFiltersPanel"),
+  banksFilterToggle: document.querySelector("#banksFilterToggle"),
+  namesFilterToggle: document.querySelector("#namesFilterToggle"),
+  resetBalanceFilterButton: document.querySelector("#resetBalanceFilterButton"),
   incomeCount: document.querySelector("#incomeCount"),
   purchaseCount: document.querySelector("#purchaseCount"),
   transferCount: document.querySelector("#transferCount"),
@@ -466,6 +491,8 @@ function init() {
     }
     renderAppVersion();
     bindEvents();
+    lastFilterView = getActiveFilterView();
+    loadFiltersForActiveView();
     setupSyncDialogMode();
     reconcileStaleBotPending();
     initFamilySync();
@@ -1120,15 +1147,36 @@ function scrubFiltersToPeople(appState) {
 }
 
 function readLocalFiltersFromStorage() {
+  return readFiltersForView("main");
+}
+
+function writeLocalFiltersToStorage(filters) {
+  writeFiltersForView("main", filters);
+}
+
+function getFilterViewKey(view) {
+  return view === "details" ? "details" : "main";
+}
+
+function getActiveFilterView() {
+  return activeView === "details" ? "details" : "main";
+}
+
+function readFiltersForView(view = getActiveFilterView()) {
+  const keys = FILTER_VIEW_STORAGE[getFilterViewKey(view)];
   let activeFolderIds = [];
   let activeFirstNames = [];
   let singleFilterMode = false;
+  let balanceMin = "";
+  let balanceMax = "";
   try {
-    const folders = localStorage.getItem(ACTIVE_FOLDER_IDS_KEY);
+    const folders = localStorage.getItem(keys.folderIds);
     if (folders) activeFolderIds = JSON.parse(folders);
-    const names = localStorage.getItem(ACTIVE_FIRST_NAMES_KEY);
+    const names = localStorage.getItem(keys.firstNames);
     if (names) activeFirstNames = JSON.parse(names);
-    singleFilterMode = localStorage.getItem(SINGLE_FILTER_MODE_KEY) === "1";
+    singleFilterMode = localStorage.getItem(keys.singleMode) === "1";
+    balanceMin = localStorage.getItem(keys.balanceMin) || "";
+    balanceMax = localStorage.getItem(keys.balanceMax) || "";
   } catch {
     // ignore broken local filter storage
   }
@@ -1136,17 +1184,69 @@ function readLocalFiltersFromStorage() {
     activeFolderIds: Array.isArray(activeFolderIds) ? activeFolderIds : [],
     activeFirstNames: Array.isArray(activeFirstNames) ? activeFirstNames : [],
     singleFilterMode,
+    balanceMin: String(balanceMin ?? ""),
+    balanceMax: String(balanceMax ?? ""),
   };
 }
 
-function writeLocalFiltersToStorage(filters) {
+function writeFiltersForView(view, filters) {
+  const keys = FILTER_VIEW_STORAGE[getFilterViewKey(view)];
   try {
-    localStorage.setItem(ACTIVE_FOLDER_IDS_KEY, JSON.stringify(filters.activeFolderIds || []));
-    localStorage.setItem(ACTIVE_FIRST_NAMES_KEY, JSON.stringify(filters.activeFirstNames || []));
-    localStorage.setItem(SINGLE_FILTER_MODE_KEY, filters.singleFilterMode ? "1" : "0");
+    localStorage.setItem(keys.folderIds, JSON.stringify(filters.activeFolderIds || []));
+    localStorage.setItem(keys.firstNames, JSON.stringify(filters.activeFirstNames || []));
+    localStorage.setItem(keys.singleMode, filters.singleFilterMode ? "1" : "0");
+    localStorage.setItem(keys.balanceMin, String(filters.balanceMin ?? ""));
+    localStorage.setItem(keys.balanceMax, String(filters.balanceMax ?? ""));
   } catch {
     // ignore quota errors
   }
+}
+
+function sanitizeFiltersForPeople(filters, appState = state) {
+  const names = new Set((appState.people || []).map((person) => getPersonFirstName(person)));
+  const folderIds = new Set((appState.folders || []).map((folder) => folder.id));
+  return {
+    activeFolderIds: (filters.activeFolderIds || []).filter((id) => folderIds.has(id)),
+    activeFirstNames: (filters.activeFirstNames || []).filter((name) => names.has(name)),
+    singleFilterMode: Boolean(filters.singleFilterMode),
+    balanceMin: String(filters.balanceMin ?? ""),
+    balanceMax: String(filters.balanceMax ?? ""),
+  };
+}
+
+function applyFiltersToUiState(filters) {
+  state.activeFolderIds = [...(filters.activeFolderIds || [])];
+  state.activeFirstNames = [...(filters.activeFirstNames || [])];
+  state.singleFilterMode = Boolean(filters.singleFilterMode);
+  balanceFilterMin = String(filters.balanceMin ?? "");
+  balanceFilterMax = String(filters.balanceMax ?? "");
+  if (elements.balanceMinInput) elements.balanceMinInput.value = balanceFilterMin;
+  if (elements.balanceMaxInput) elements.balanceMaxInput.value = balanceFilterMax;
+}
+
+function persistFiltersForView(view = getActiveFilterView()) {
+  writeFiltersForView(view, {
+    activeFolderIds: state.activeFolderIds || [],
+    activeFirstNames: state.activeFirstNames || [],
+    singleFilterMode: Boolean(state.singleFilterMode),
+    balanceMin: balanceFilterMin,
+    balanceMax: balanceFilterMax,
+  });
+}
+
+function loadFiltersForActiveView() {
+  applyFiltersToUiState(sanitizeFiltersForPeople(readFiltersForView(getActiveFilterView())));
+}
+
+function syncFilterViewOnNavigation() {
+  const nextView = getActiveFilterView();
+  if (nextView === lastFilterView) return;
+  persistFiltersForView(lastFilterView);
+  lastFilterView = nextView;
+  loadFiltersForActiveView();
+  renderFolders();
+  renderFirstNameFilters();
+  renderSingleFilterToggle();
 }
 
 function migrateLocalFiltersFromState(appState) {
@@ -1175,11 +1275,7 @@ function applyLocalFiltersToState(appState) {
 }
 
 function persistLocalFiltersFromState() {
-  writeLocalFiltersToStorage({
-    activeFolderIds: state.activeFolderIds || [],
-    activeFirstNames: state.activeFirstNames || [],
-    singleFilterMode: Boolean(state.singleFilterMode),
-  });
+  persistFiltersForView(getActiveFilterView());
 }
 
 function preserveLocalFiltersOnly(localState, mergedState) {
@@ -1279,6 +1375,38 @@ function focusDialogInput(input) {
   }, 0);
 }
 
+function bindDialogScrollTrap(container) {
+  if (!container || container.dataset.scrollTrapBound) return;
+  container.dataset.scrollTrapBound = "1";
+  let lastTouchY = 0;
+  container.addEventListener("touchstart", (event) => {
+    lastTouchY = event.touches[0]?.clientY ?? 0;
+  }, { passive: true });
+  container.addEventListener("touchmove", (event) => {
+    if (container.scrollHeight <= container.clientHeight + 1) {
+      event.preventDefault();
+      return;
+    }
+    const touchY = event.touches[0]?.clientY ?? lastTouchY;
+    const deltaY = touchY - lastTouchY;
+    lastTouchY = touchY;
+    const atTop = container.scrollTop <= 0;
+    const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+    if ((atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
+      event.preventDefault();
+    }
+  }, { passive: false });
+}
+
+function setBodyDialogScrollLock(locked) {
+  document.body.classList.toggle("dialog-open-lock", Boolean(locked));
+}
+
+function updateBodyDialogScrollLock() {
+  const hasOpenDialog = APP_BACK_DIALOGS.some((dialog) => dialog?.open);
+  setBodyDialogScrollLock(hasOpenDialog);
+}
+
 function openAppDialog(dialog, options = {}) {
   if (!dialog) return;
   const initialFocus = options.initialFocus || null;
@@ -1286,6 +1414,7 @@ function openAppDialog(dialog, options = {}) {
     if (!dialog.open && typeof dialog.showModal === "function") {
       dialog.showModal();
       pushAppBackHistory();
+      updateBodyDialogScrollLock();
       if (initialFocus) {
         focusDialogInput(initialFocus);
       } else {
@@ -1301,6 +1430,7 @@ function openAppDialog(dialog, options = {}) {
   if (!dialog.open) {
     dialog.setAttribute("open", "");
     pushAppBackHistory();
+    updateBodyDialogScrollLock();
     if (initialFocus) {
       focusDialogInput(initialFocus);
     } else {
@@ -1371,6 +1501,7 @@ function closeAppDialog(dialog) {
   suppressDialogBackSync = true;
   dialog.close();
   suppressDialogBackSync = false;
+  updateBodyDialogScrollLock();
   if (appBackStackDepth > 0) {
     popAppBackHistoryWithBrowser();
   }
@@ -1382,6 +1513,7 @@ function closeTopAppDialog() {
       suppressDialogBackSync = true;
       dialog.close();
       suppressDialogBackSync = false;
+      updateBodyDialogScrollLock();
       return true;
     }
   }
@@ -1391,6 +1523,10 @@ function closeTopAppDialog() {
 function reconcileUiAfterSystemBack() {
   blurActiveInput();
   if (closeTopAppDialog()) return true;
+  if (activeView === "person") {
+    closePersonView();
+    return true;
+  }
   if (activeView !== "main") {
     activeView = "main";
     updateViewMode();
@@ -1617,8 +1753,18 @@ function bindEvents() {
   elements.folderList.addEventListener("click", handleFolderClick);
   elements.firstNameFilterList.addEventListener("click", handleFirstNameFilterClick);
   elements.singleFilterToggle.addEventListener("click", toggleSingleFilterMode);
-  if (elements.allFiltersToggle && elements.allFiltersPanel) {
-    elements.allFiltersToggle.addEventListener("click", toggleAllFiltersPanel);
+  if (elements.banksFilterToggle && elements.folderList) {
+    elements.banksFilterToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleFilterListExpand("banks");
+    });
+  }
+  if (elements.namesFilterToggle && elements.firstNameFilterList) {
+    elements.namesFilterToggle.addEventListener("click", () => toggleFilterListExpand("names"));
+  }
+  if (elements.resetBalanceFilterButton) {
+    elements.resetBalanceFilterButton.addEventListener("click", resetBalanceFilter);
   }
   elements.deletePersonButton.addEventListener("click", deleteEditingPerson);
   elements.clearHistoryButton.addEventListener("click", clearHistory);
@@ -1717,8 +1863,15 @@ function bindEvents() {
   if (elements.personOverviewActionButton) {
     elements.personOverviewActionButton.addEventListener("click", openPersonOverviewAction);
   }
+  if (elements.personOverviewContact) {
+    elements.personOverviewContact.addEventListener("click", handlePersonOverviewContactClick);
+  }
   if (elements.personHistoryList) {
     elements.personHistoryList.addEventListener("click", handleHistoryClick);
+    bindDialogScrollTrap(elements.personHistoryList);
+  }
+  if (elements.operationHistoryList) {
+    bindDialogScrollTrap(elements.operationHistoryList);
   }
   if (elements.cancelXferTimelineButton) {
     elements.cancelXferTimelineButton.addEventListener("click", () => closeAppDialog(elements.xferTimelineDialog));
@@ -1789,7 +1942,7 @@ function bindEvents() {
     elements.balanceMinInput.value = balanceFilterMin;
     elements.balanceMinInput.addEventListener("input", () => {
       balanceFilterMin = elements.balanceMinInput.value;
-      localStorage.setItem(PEOPLE_BALANCE_MIN_KEY, balanceFilterMin);
+      persistFiltersForView(getActiveFilterView());
       renderPeople();
       renderDetailsPeople();
     });
@@ -1798,7 +1951,7 @@ function bindEvents() {
     elements.balanceMaxInput.value = balanceFilterMax;
     elements.balanceMaxInput.addEventListener("input", () => {
       balanceFilterMax = elements.balanceMaxInput.value;
-      localStorage.setItem(PEOPLE_BALANCE_MAX_KEY, balanceFilterMax);
+      persistFiltersForView(getActiveFilterView());
       renderPeople();
       renderDetailsPeople();
     });
@@ -2873,6 +3026,7 @@ function applyPersonDraft(draft) {
 }
 
 function updateViewMode() {
+  syncFilterViewOnNavigation();
   if (activeView !== "bulk" && elements.bulkListView && !elements.bulkListView.hidden) {
     saveBulkDraft();
   }
@@ -2935,11 +3089,10 @@ function renderTotal() {
   let purchaseTodayCount = 0;
   let transferTodayCount = 0;
   let incomeTodayCount = 0;
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const todayMs = startOfToday.getTime();
+  const { startMs, endMs } = getAppDayBounds();
   state.history.forEach((item) => {
-    const isToday = Number(item.createdAt || 0) >= todayMs;
+    const ts = Number(item.createdAt || 0);
+    const isToday = ts >= startMs && ts < endMs;
     if (item.type === "purchase") {
       purchaseTotal += item.amount;
       if (isToday) {
@@ -3099,16 +3252,17 @@ function buildPersonCard(person, stats, detailed) {
 }
 
 function renderPeopleList(container, detailed) {
-  let visiblePeople = getVisiblePeople();
+  const filterView = detailed ? "details" : "main";
+  let visiblePeople = getVisiblePeopleForView(filterView);
 
-  if (state.people.length > 0 && visiblePeople.length === 0 && !filtersAutoCleared) {
+  if (state.people.length > 0 && visiblePeople.length === 0 && !filtersAutoCleared && filterView === getActiveFilterView()) {
     filtersAutoCleared = true;
     state.activeFolderIds = [];
     state.activeFirstNames = [];
     persistLocalFiltersFromState();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
-    visiblePeople = getVisiblePeople();
+    visiblePeople = getVisiblePeopleForView(filterView);
   }
 
   if (state.people.length === 0) {
@@ -3466,12 +3620,13 @@ function renderFirstNameFilters() {
   elements.firstNameFilterList.append(fragment);
 }
 
-function getVisiblePeople() {
+function getVisiblePeopleForView(view = getActiveFilterView()) {
+  const filters = sanitizeFiltersForPeople(readFiltersForView(view));
   const activeFolderIds = state.folders
     .map((folder) => folder.id)
-    .filter((id) => state.activeFolderIds.includes(id));
-  const activeFirstNames = state.activeFirstNames.filter((name) =>
-    state.people.some((person) => getPersonFirstName(person) === name)
+    .filter((id) => filters.activeFolderIds.includes(id));
+  const activeFirstNames = filters.activeFirstNames.filter((name) =>
+    state.people.some((person) => getPersonFirstName(person) === name),
   );
 
   let people = state.people;
@@ -3492,7 +3647,7 @@ function getVisiblePeople() {
   }
 
   if (activeFirstNames.length === 0) {
-    return finalizePeopleListView(people);
+    return finalizePeopleListView(people, filters);
   }
 
   const addedIds = new Set();
@@ -3506,18 +3661,26 @@ function getVisiblePeople() {
     });
   });
 
-  return finalizePeopleListView(namePeople);
+  return finalizePeopleListView(namePeople, filters);
 }
 
-function finalizePeopleListView(people) {
-  let result = applyBalanceFilter(people);
+function getVisiblePeople() {
+  return getVisiblePeopleForView(getActiveFilterView());
+}
+
+function finalizePeopleListView(people, filters = null) {
+  let result = applyBalanceFilter(people, filters);
   result = applyPeopleSort(result);
   return result;
 }
 
-function applyBalanceFilter(people) {
-  const min = balanceFilterMin === "" ? null : Number(balanceFilterMin);
-  const max = balanceFilterMax === "" ? null : Number(balanceFilterMax);
+function applyBalanceFilter(people, filters = null) {
+  const source = filters || {
+    balanceMin: balanceFilterMin,
+    balanceMax: balanceFilterMax,
+  };
+  const min = source.balanceMin === "" ? null : Number(source.balanceMin);
+  const max = source.balanceMax === "" ? null : Number(source.balanceMax);
   return people.filter((person) => {
     const balance = Number(person.balance || 0);
     if (min != null && Number.isFinite(min) && balance < min) return false;
@@ -3615,13 +3778,25 @@ function toggleSingleFilterMode() {
   renderSingleFilterToggle();
 }
 
-function toggleAllFiltersPanel() {
-  if (!elements.allFiltersPanel || !elements.allFiltersToggle) return;
-  const open = elements.allFiltersPanel.hidden;
-  elements.allFiltersPanel.hidden = !open;
-  elements.allFiltersToggle.setAttribute("aria-expanded", open ? "true" : "false");
-  elements.allFiltersToggle.textContent = open ? "все фильтры ▴" : "все фильтры ▾";
-  elements.allFiltersToggle.classList.toggle("active", open);
+function toggleFilterListExpand(kind) {
+  const list = kind === "banks" ? elements.folderList : elements.firstNameFilterList;
+  const toggle = kind === "banks" ? elements.banksFilterToggle : elements.namesFilterToggle;
+  if (!list || !toggle) return;
+  const open = !list.classList.contains("is-expanded");
+  list.classList.toggle("is-expanded", open);
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  toggle.textContent = open ? "▴" : "▾";
+  toggle.classList.toggle("active", open);
+  if (!open) list.scrollLeft = 0;
+}
+
+function resetBalanceFilter() {
+  balanceFilterMin = "";
+  balanceFilterMax = "";
+  if (elements.balanceMinInput) elements.balanceMinInput.value = "";
+  if (elements.balanceMaxInput) elements.balanceMaxInput.value = "";
+  persistFiltersForView(getActiveFilterView());
+  renderPeople();
 }
 
 function handleFolderClick(event) {
@@ -3714,10 +3889,60 @@ function deleteFolder(folder) {
   return true;
 }
 
-function getPersonStats(personId) {
-  const personHistory = state.history
+function dedupeHistoryEntries(items) {
+  const byId = new Map();
+  (items || []).forEach((item) => {
+    if (!item?.id) return;
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  });
+  return [...byId.values()];
+}
+
+function collectAllHistoryEntriesFlat() {
+  const raw = [];
+  (state.history || []).forEach((item) => raw.push(item));
+  (state.historyMonths || []).forEach((month) => {
+    (month.history || []).forEach((item) => raw.push(item));
+  });
+  return dedupeHistoryEntries(raw);
+}
+
+function getAppDayStartMs(atMs = Date.now()) {
+  const anchor = new Date(atMs);
+  anchor.setHours(2, 0, 0, 0);
+  if (atMs < anchor.getTime()) {
+    anchor.setDate(anchor.getDate() - 1);
+  }
+  return anchor.getTime();
+}
+
+function getAppDayBounds(atMs = Date.now()) {
+  const startMs = getAppDayStartMs(atMs);
+  return { startMs, endMs: startMs + 24 * 60 * 60 * 1000 };
+}
+
+function getPersonTodayPurchaseStats(personId, atMs = Date.now()) {
+  const { startMs, endMs } = getAppDayBounds(atMs);
+  const items = getPersonHistoryEntries(personId).filter(
+    (item) => item.type === "purchase"
+      && Number(item.createdAt || 0) >= startMs
+      && Number(item.createdAt || 0) < endMs,
+  );
+  return {
+    total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    count: items.length,
+    items: items.sort((a, b) => b.createdAt - a.createdAt),
+  };
+}
+
+function getPersonHistoryEntries(personId) {
+  return collectAllHistoryEntriesFlat()
     .filter((item) => item.personId === personId)
-    .sort((a, b) => a.createdAt - b.createdAt);
+    .sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+}
+
+function getPersonStats(personId) {
+  const personHistory = getPersonHistoryEntries(personId);
   const now = Date.now();
   const day3 = 3 * 24 * 60 * 60 * 1000;
   const day7 = 7 * 24 * 60 * 60 * 1000;
@@ -3759,6 +3984,7 @@ function getPersonStats(personId) {
     personHistory,
     lastIncome ? lastIncomeIndex : -1,
   );
+  const todayPurchases = getPersonTodayPurchaseStats(personId, now);
   const monthPurchases = getPersonMonthPurchaseStats(personId);
   const allTimePurchases = getPersonAllTimePurchaseStats(personId);
 
@@ -3781,6 +4007,8 @@ function getPersonStats(personId) {
     purchasesLast3DaysTotal: purchasesLast3Days.reduce((sum, item) => sum + item.amount, 0),
     purchasesLast7DaysCount: purchasesLast7Days.length,
     purchasesLast7DaysTotal: purchasesLast7Days.reduce((sum, item) => sum + item.amount, 0),
+    todayPurchaseCount: todayPurchases.count,
+    todayPurchaseTotal: todayPurchases.total,
     transferIndicator,
   };
 }
@@ -3867,14 +4095,6 @@ function getMonthBoundsFromKey(monthKey) {
   const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
   const end = new Date(year, month, 0, 23, 59, 59, 999);
   return { startMs: start.getTime(), endMs: end.getTime() };
-}
-
-function collectAllHistoryEntriesFlat() {
-  const items = [...(state.history || [])];
-  (state.historyMonths || []).forEach((month) => {
-    (month.history || []).forEach((item) => items.push(item));
-  });
-  return items;
 }
 
 function getPersonPurchaseStatsForMonth(personId, monthKey) {
@@ -4095,12 +4315,14 @@ function buildXferTimeline(personId) {
 }
 
 function getPurchasesSinceLastIncome(personId) {
-  const personHistory = state.history
-    .filter((item) => item.personId === personId)
-    .sort((a, b) => a.createdAt - b.createdAt);
+  const personHistory = getPersonHistoryEntries(personId);
   const incomes = personHistory.filter((item) => item.type === "income");
   const lastIncome = incomes[incomes.length - 1] ?? null;
-  if (!lastIncome) return [];
+  if (!lastIncome) {
+    return personHistory
+      .filter((item) => item.type === "purchase")
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
   const lastIncomeIndex = personHistory.findIndex((item) => item.id === lastIncome.id);
   return personHistory
     .slice(lastIncomeIndex + 1)
@@ -4909,6 +5131,15 @@ function handlePeopleClick(event) {
     return;
   }
 
+  const statsTodayBtn = event.target.closest('[data-action="stats-today"]');
+  if (statsTodayBtn) {
+    const card = event.target.closest(".person-card");
+    if (!card) return;
+    const person = state.people.find((item) => item.id === card.dataset.personId);
+    if (person) openPersonPurchaseStatsDialog(person, "today");
+    return;
+  }
+
   const statsSinceBtn = event.target.closest('[data-action="stats-since"]');
   if (statsSinceBtn) {
     const card = event.target.closest(".person-card");
@@ -5014,6 +5245,10 @@ function fillPersonPurchaseStatsDialog(person, mode) {
     items = getPurchasesSinceLastIncome(person.id);
     label = "С пополнения";
     hint = allTimeHint;
+  } else if (mode === "today") {
+    items = getPersonTodayPurchaseStats(person.id).items;
+    label = "Сегодня";
+    hint = "День считается с 02:00 до 02:00";
   } else {
     items = getPersonMonthPurchaseStats(person.id).items;
     label = `За ${getCurrentMonthLabel()}`;
@@ -5022,10 +5257,15 @@ function fillPersonPurchaseStatsDialog(person, mode) {
   if (elements.personHistoryTitle) elements.personHistoryTitle.textContent = person.name;
   if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = label;
   if (elements.personHistoryHint) elements.personHistoryHint.textContent = hint;
+  const emptyText = mode === "since"
+    ? "Покупок с пополнения пока нет"
+    : mode === "today"
+      ? "Покупок за сегодня пока нет"
+      : "Покупок за этот месяц пока нет";
   renderMiniHistoryList(
     elements.personHistoryList,
     items,
-    mode === "since" ? "Покупок с пополнения пока нет" : "Покупок за этот месяц пока нет",
+    emptyText,
   );
 }
 
@@ -5045,7 +5285,7 @@ function refreshPersonHistoryDialogIfOpen() {
     if (person) fillPersonOverviewDialog(person);
     return;
   }
-  if (personHistoryDialogMode === "since" || personHistoryDialogMode === "month") {
+  if (personHistoryDialogMode === "since" || personHistoryDialogMode === "month" || personHistoryDialogMode === "today") {
     fillPersonPurchaseStatsDialog(person, personHistoryDialogMode);
   }
 }
@@ -5058,18 +5298,48 @@ function setPersonOverviewPanelVisible(visible) {
   }
 }
 
+function getPersonFolderNames(person) {
+  const folderIds = new Set(Array.isArray(person?.folderIds) ? person.folderIds : []);
+  return state.folders
+    .filter((folder) => folderIds.has(folder.id))
+    .map((folder) => folder.name);
+}
+
 function fillPersonOverviewContact(person) {
   const phone = String(person.phone || "").trim();
   const card = String(person.cardNumber || "").trim();
   const comment = String(person.profileNote || "").trim();
   if (elements.personOverviewPhone) {
     elements.personOverviewPhone.textContent = phone ? `Телефон: ${phone}` : "Телефон: —";
+    elements.personOverviewPhone.disabled = !phone;
   }
   if (elements.personOverviewCard) {
     elements.personOverviewCard.textContent = card ? `Карта: ${card}` : "Карта: —";
+    elements.personOverviewCard.disabled = !card;
   }
   if (elements.personOverviewComment) {
     elements.personOverviewComment.textContent = comment ? `Комментарий: ${comment}` : "Комментарий: —";
+    elements.personOverviewComment.disabled = !comment;
+  }
+}
+
+function handlePersonOverviewContactClick(event) {
+  const line = event.target.closest("[data-copy-contact]");
+  if (!line || line.disabled) return;
+  const person = state.people.find((item) => item.id === personHistoryDialogPersonId);
+  if (!person) return;
+  const stats = getPersonStats(person.id);
+  const mode = line.dataset.copyContact;
+  if (mode === "phone") {
+    copyText(buildPersonCopyText("phone", person, stats));
+    return;
+  }
+  if (mode === "card") {
+    copyText(buildPersonCopyText("card", person, stats));
+    return;
+  }
+  if (mode === "comment") {
+    copyText(String(person.profileNote || "").trim());
   }
 }
 
@@ -5078,9 +5348,14 @@ function fillPersonOverviewDialog(person) {
   if (elements.personHistoryTitle) elements.personHistoryTitle.textContent = person.name;
   if (elements.personHistoryLabel) elements.personHistoryLabel.textContent = "Карта";
   if (elements.personHistoryHint) {
-    elements.personHistoryHint.textContent = personOverviewShowContact
-      ? "Можно изменить баланс и посмотреть историю."
-      : "Можно изменить актуальный баланс и посмотреть историю.";
+    if (personOverviewShowContact) {
+      const folderNames = getPersonFolderNames(person);
+      elements.personHistoryHint.textContent = folderNames.length
+        ? folderNames.join(", ")
+        : "Папки не указаны";
+    } else {
+      elements.personHistoryHint.textContent = "";
+    }
   }
   if (elements.personOverviewBalanceInput) {
     elements.personOverviewBalanceInput.value = String(person.balance ?? 0);
@@ -5165,12 +5440,33 @@ function handleDetailsPeopleClick(event) {
 function handleDetailsCopyAllClick(event) {
   const copyButton = event.target.closest("button[data-copy-all]");
   if (!copyButton) return;
-  copyText(buildAllPeopleCopyText(copyButton.dataset.copyAll));
+  event.preventDefault();
+  event.stopPropagation();
+  copyText(buildAllPeopleCopyText(copyButton.dataset.copyAll, "details"));
 }
 
-function buildAllPeopleCopyText(mode) {
-  const people = getVisiblePeople();
+function resolvePeopleForCopyAll(filterView = getActiveFilterView()) {
+  const fromFilters = getVisiblePeopleForView(filterView);
+  if (fromFilters.length > 0) return fromFilters;
+
+  const list = filterView === "details" ? elements.detailsPeopleList : elements.peopleList;
+  if (list) {
+    const fromDom = [...list.querySelectorAll(".person-card")]
+      .map((card) => state.people.find((person) => person.id === card.dataset.personId))
+      .filter(Boolean);
+    if (fromDom.length > 0) return fromDom;
+  }
+
+  return fromFilters;
+}
+
+function buildAllPeopleCopyText(mode, filterView = getActiveFilterView()) {
+  const people = resolvePeopleForCopyAll(filterView);
   if (people.length === 0) return "";
+
+  if (mode === "name-balance") {
+    return people.map((person) => buildPersonCopyText(mode, person).trim()).filter(Boolean).join("\n");
+  }
 
   const blocks = people.map((person) => {
     const stats = getPersonStats(person.id);
@@ -5180,7 +5476,8 @@ function buildAllPeopleCopyText(mode) {
   return blocks.join("\n\n");
 }
 
-function openPersonDialog(person = null) {
+function openPersonDialog(person = null, options = {}) {
+  personViewReturnView = options.returnView || (activeView === "details" ? "details" : "main");
   editingPersonId = person?.id ?? null;
   phoneAutoPrefixSuppressed = false;
   elements.personDialogTitle.textContent = person ? "Изменить карту" : "Добавить карту";
@@ -5236,12 +5533,15 @@ function openPersonView() {
 
 function closePersonView(options = {}) {
   if (!editingPersonId && !options.skipDraftSave) savePersonDraft();
+  const returnView = activeView === "person" ? (personViewReturnView || "main") : "main";
   if (activeView !== "person") {
-    activeView = "main";
+    activeView = returnView;
+    personViewReturnView = "main";
     updateViewMode();
     return;
   }
-  activeView = "main";
+  activeView = returnView;
+  personViewReturnView = "main";
   updateViewMode();
   popAppBackHistoryWithBrowser();
 }
@@ -5670,7 +5970,7 @@ function renderOperationHistoryList(personId) {
 
 function refreshOperationDialog(person) {
   if (!person || !currentOperation) return;
-  const stats = getPersonStats(person);
+  const stats = getPersonStats(person.id);
   const statsParts = formatPersonPurchaseStatsParts(stats);
   if (elements.operationBalanceInput) {
     elements.operationBalanceInput.value = formatMoney(person.balance);
@@ -6792,21 +7092,34 @@ function statCountColorClass(count) {
 function formatPersonPurchaseStatsParts(stats) {
   const sinceAmt = formatMoney(stats.purchasesTotal);
   const sinceCnt = Number(stats.purchasesCount || 0);
-  const monthAmt = formatMoney(stats.monthPurchaseTotal);
-  const monthCnt = Number(stats.monthPurchaseCount || 0);
+  const allAmt = formatMoney(stats.purchasesAllTotal);
+  const allCnt = Number(stats.purchasesAllCount || 0);
   const sinceCls = statCountColorClass(sinceCnt);
-  const monthCls = statCountColorClass(monthCnt);
+  const allCls = statCountColorClass(allCnt);
 
   const sinceBtn = `<button type="button" class="stats-segment stats-segment-since" data-action="stats-since" aria-label="Покупки с пополнения">С пополнения <span class="stat-amt ${sinceCls}">${sinceAmt}р</span> <span class="stat-dot">●</span> <span class="stat-cnt ${sinceCls}">${sinceCnt}шт</span></button>`;
-  const monthBtn = `<button type="button" class="stats-segment stats-segment-month" data-action="stats-month" aria-label="Покупки за месяц"> - всего <span class="stat-amt ${monthCls}">${monthAmt}р</span> <span class="stat-dot">●</span> <span class="stat-cnt ${monthCls}">${monthCnt}шт</span></button>`;
-  const xferHtml = formatTransferIndicatorHtml(stats.transferIndicator);
-  const rowHtml = `<span class="person-stats-row"><span class="person-stats-body">${sinceBtn}${monthBtn}</span><span class="person-stats-xfer-fixed">${xferHtml}</span></span>`;
-  const mainHtml = `С пополнения ${formatMoneyRub(stats.purchasesTotal)} • ${formatPurchaseCount(stats.purchasesCount)} - всего ${formatMoneyRub(stats.monthPurchaseTotal)} • ${stats.monthPurchaseCount} шт`;
+  const totalBtn = `<button type="button" class="stats-segment stats-segment-month" data-action="stats-month" aria-label="Покупки за месяц"> - всего <span class="stat-amt ${allCls}">${allAmt}р</span> <span class="stat-dot">●</span> <span class="stat-cnt ${allCls}">${allCnt}шт</span></button>`;
+  const xferHtml = formatTodayPurchaseIndicatorHtml(stats);
+  const rowHtml = `<span class="person-stats-row"><span class="person-stats-body">${sinceBtn}${totalBtn}</span><span class="person-stats-xfer-fixed">${xferHtml}</span></span>`;
+  const mainHtml = `С пополнения ${formatMoneyRub(stats.purchasesTotal)} • ${formatPurchaseCount(stats.purchasesCount)} - всего ${formatMoneyRub(stats.purchasesAllTotal)} • ${stats.purchasesAllCount} шт`;
   return { rowHtml, mainHtml };
 }
 
 function formatPersonPurchaseStatsHtml(stats) {
   return formatPersonPurchaseStatsParts(stats).rowHtml;
+}
+
+function todayPurchaseColorClass(count) {
+  const value = Number(count || 0);
+  if (value === 0) return "xfer-bad";
+  if (value === 1) return "xfer-warn";
+  return "xfer-ok";
+}
+
+function formatTodayPurchaseIndicatorHtml(stats) {
+  const count = Number(stats.todayPurchaseCount || 0);
+  const color = todayPurchaseColorClass(count);
+  return `<button type="button" class="xfer-indicator ${color}" data-action="stats-today" aria-label="Покупки за сегодня (с 02:00)">${count}</button>`;
 }
 
 function formatTransferIndicatorHtml(ti) {
@@ -6848,6 +7161,12 @@ function buildPersonCopyText(mode, person, stats) {
   const lastName = String(person?.lastName ?? "").trim();
   const nameTag = `[${firstName}][${lastName}]`;
   switch (mode) {
+    case "name-balance": {
+      const firstName = getPersonFirstName(person) || "—";
+      const lastName = getPersonLastName(person) || "—";
+      const balance = formatMoney(person.balance);
+      return `${firstName} - ${lastName} - ${balance}`;
+    }
     case "phone": {
       const phone = String(person?.phone ?? "").trim();
       return `${phone} ${nameTag}`.trim();
