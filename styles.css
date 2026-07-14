@@ -985,6 +985,17 @@ body.person-reorder-lock {
   text-align: center;
 }
 
+.person-card-top .person-top-actions .bot-toggle {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  margin-left: 0;
+  font-size: 1.05rem;
+}
+
 .person-top-actions .mini {
   width: 100%;
   min-width: 8.75rem;
@@ -1992,6 +2003,12 @@ label {
     font-size: 0.67rem;
   }
 
+  .person-card-top .person-top-actions .bot-toggle {
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+  }
+
   .amount-key {
     min-height: 48px;
     font-size: 1.2rem;
@@ -2695,6 +2712,29 @@ body:not(.android-webview) .top-actions-bar {
 .operation-stats-line {
   font-size: 0.58rem;
   line-height: 1.35;
+}
+
+.operation-balance-field input {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.operation-history-block {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.operation-history-block .inline-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.operation-history-list {
+  max-height: min(36vh, 280px);
+  overflow-y: auto;
 }
 
 .person-history-list {
