@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=214">
+    <link rel="stylesheet" href="./styles.css?v=215">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -120,12 +120,12 @@
             <button class="ghost mini" type="button" id="addFolderButton" aria-label="Добавить банк">+</button>
           </div>
 
-          <div class="filter-expand-row">
-            <div class="folder-list folder-list-flow filter-list-collapsed" id="folderList" aria-label="Банки-фильтры"></div>
-            <button class="ghost mini filter-expand-toggle" type="button" id="banksFilterToggle" aria-expanded="false" aria-label="Все банки">▾</button>
+          <div class="filter-banks-row">
+            <div class="folder-list folder-list-scroll filter-list-collapsed" id="folderList" aria-label="Банки-фильтры"></div>
+            <button class="ghost mini filter-expand-toggle" type="button" id="banksFilterToggle" aria-expanded="false" aria-label="Развернуть банки">▾</button>
           </div>
 
-          <div class="filter-expand-row">
+          <div class="filter-names-row" id="namesFilterRow" hidden aria-hidden="true">
             <div class="folder-list filter-list-collapsed" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
             <button class="ghost mini filter-expand-toggle" type="button" id="namesFilterToggle" aria-expanded="false" aria-label="Все имена">▾</button>
           </div>
@@ -151,12 +151,12 @@
           <div class="details-copy-all" id="detailsCopyAll">
             <span class="inline-label">Все люди</span>
             <div class="person-copy-actions details-copy-actions">
-              <button type="button" class="copy-chip" data-copy-all="name-balance">Имя—баланс</button>
               <button type="button" class="copy-chip" data-copy-all="phone">Телефон</button>
               <button type="button" class="copy-chip" data-copy-all="card">Карта</button>
               <button type="button" class="copy-chip" data-copy-all="phone-card">Тел+карта</button>
               <button type="button" class="copy-chip" data-copy-all="brief">Краткие данные</button>
               <button type="button" class="copy-chip" data-copy-all="full">Все данные</button>
+              <button type="button" class="copy-chip" data-copy-all="name-balance">Имя—баланс</button>
             </div>
           </div>
         </section>
@@ -597,14 +597,14 @@
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
     <button type="button" class="device-name-footer" id="deviceNameFooter" aria-label="Название устройства"></button>
-    <script src="server-config.js?v=214" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=214" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=214" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=214" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=214" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=214" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=214" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=214" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=214" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=215" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=215" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=215" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=215" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=215" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=215" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=215" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=215" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=215" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
