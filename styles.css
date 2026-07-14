@@ -436,6 +436,7 @@ dialog {
   padding: 0 9px;
   font-size: 0.7rem;
   gap: 4px;
+  flex: 0 0 auto;
 }
 
 .folder-card .empty-state {
@@ -2773,28 +2774,54 @@ body.dialog-open-lock .app {
   overflow: hidden;
 }
 
-.filter-expand-row {
+.filter-banks-row {
   display: flex;
   align-items: flex-start;
   gap: 6px;
   margin-top: 8px;
 }
 
-.filter-expand-row .folder-list {
+.filter-banks-row .folder-list-scroll {
   flex: 1;
   min-width: 0;
 }
 
-.filter-list-collapsed:not(.is-expanded) {
+.filter-names-row {
+  display: none !important;
+}
+
+.folder-list-scroll {
+  display: flex;
+  gap: 5px;
+  align-items: flex-start;
+}
+
+.folder-list-scroll:not(.is-expanded) {
   flex-wrap: nowrap;
-  overflow: hidden;
-  max-height: 30px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.folder-list-scroll:not(.is-expanded)::-webkit-scrollbar {
+  display: none;
+}
+
+.folder-list-scroll.is-expanded {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.folder-list-scroll .folder-chip {
+  flex: 0 0 auto;
 }
 
 .filter-list-collapsed.is-expanded {
   flex-wrap: wrap;
   overflow: visible;
-  max-height: none;
 }
 
 .filter-expand-toggle {
@@ -2803,6 +2830,12 @@ body.dialog-open-lock .app {
   min-height: 28px;
   padding: 0;
   line-height: 1;
+  align-self: flex-start;
+}
+
+.filter-expand-toggle.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .folder-card .people-balance-filter {
