@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Семейный счетчик</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=208">
+    <link rel="stylesheet" href="./styles.css?v=214">
   </head>
   <body>
     <div id="bootErrorScreen" class="boot-error-screen boot-error-screen--loading">
@@ -106,7 +106,6 @@
         <div id="mainView">
         <section class="card folder-card" id="peopleFilterCard">
           <div class="quick-filter-row">
-            <span class="inline-label">Сорт.</span>
             <select id="peopleSortSelect" class="quick-sort-select" aria-label="Сортировка людей">
               <option value="manual">Свой</option>
               <option value="balance-desc">Крупный баланс</option>
@@ -116,29 +115,25 @@
               <option value="purchases-since">Больше покупок с пополнения</option>
               <option value="purchases-since-asc">Меньше покупок с пополнения</option>
             </select>
-            <button class="ghost mini all-filters-toggle" type="button" id="allFiltersToggle" aria-expanded="false">все фильтры ▾</button>
-            <span class="single-filter-text">1 фильтр</span>
             <button class="toggle-chip" type="button" id="singleFilterToggle" aria-label="Только один фильтр">🚫</button>
             <button class="ghost mini" type="button" id="deleteFolderButton" aria-label="Удалить банк">−</button>
             <button class="ghost mini" type="button" id="addFolderButton" aria-label="Добавить банк">+</button>
           </div>
 
-          <div id="allFiltersPanel" hidden>
-            <div class="banks-bar">
-              <span class="inline-label">Банки</span>
-              <div class="folder-list folder-list-flow" id="folderList" aria-label="Банки-фильтры"></div>
-            </div>
-            <div class="folder-row">
-              <span class="inline-label">Имена</span>
-              <div class="folder-list" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
-            </div>
-            <div class="people-controls">
-              <div class="people-balance-filter">
-                <span class="inline-label">Баланс</span>
-                <input id="balanceMinInput" type="number" inputmode="numeric" step="100" placeholder="от" aria-label="Баланс от">
-                <input id="balanceMaxInput" type="number" inputmode="numeric" step="100" placeholder="до" aria-label="Баланс до">
-              </div>
-            </div>
+          <div class="filter-expand-row">
+            <div class="folder-list folder-list-flow filter-list-collapsed" id="folderList" aria-label="Банки-фильтры"></div>
+            <button class="ghost mini filter-expand-toggle" type="button" id="banksFilterToggle" aria-expanded="false" aria-label="Все банки">▾</button>
+          </div>
+
+          <div class="filter-expand-row">
+            <div class="folder-list filter-list-collapsed" id="firstNameFilterList" aria-label="Фильтр по имени"></div>
+            <button class="ghost mini filter-expand-toggle" type="button" id="namesFilterToggle" aria-expanded="false" aria-label="Все имена">▾</button>
+          </div>
+
+          <div class="people-balance-filter">
+            <input id="balanceMinInput" type="number" inputmode="numeric" step="100" placeholder="от" aria-label="Баланс от">
+            <input id="balanceMaxInput" type="number" inputmode="numeric" step="100" placeholder="до" aria-label="Баланс до">
+            <button class="ghost mini" type="button" id="resetBalanceFilterButton" aria-label="Сбросить фильтр баланса">🔄</button>
           </div>
         </section>
 
@@ -156,6 +151,7 @@
           <div class="details-copy-all" id="detailsCopyAll">
             <span class="inline-label">Все люди</span>
             <div class="person-copy-actions details-copy-actions">
+              <button type="button" class="copy-chip" data-copy-all="name-balance">Имя—баланс</button>
               <button type="button" class="copy-chip" data-copy-all="phone">Телефон</button>
               <button type="button" class="copy-chip" data-copy-all="card">Карта</button>
               <button type="button" class="copy-chip" data-copy-all="phone-card">Тел+карта</button>
@@ -379,8 +375,8 @@
           >
         </label>
 
-        <label class="amount-preview amount-preview-input operation-balance-field operation-amount-field">
-          <span>Сумма</span>
+        <label class="operation-sum-field">
+          Сумма
           <input
             id="selectedAmountInput"
             type="text"
@@ -392,9 +388,9 @@
           >
         </label>
 
-        <label>
-          Комментарий
-          <input id="noteInput" maxlength="80" placeholder="Например: продукты, школа, такси">
+        <label class="amount-preview amount-preview-input operation-balance-field operation-comment-field">
+          <span>Комментарий</span>
+          <input id="noteInput" maxlength="80" placeholder="Например: продукты, школа, такси" aria-label="Комментарий">
         </label>
 
         <div class="operation-action-grid">
@@ -473,9 +469,9 @@
           <button class="primary mini" type="button" id="savePersonOverviewBalanceButton">Сохранить</button>
         </div>
         <div class="person-overview-contact" id="personOverviewContact" hidden>
-          <div class="person-overview-contact-line" id="personOverviewPhone"></div>
-          <div class="person-overview-contact-line" id="personOverviewCard"></div>
-          <div class="person-overview-contact-line" id="personOverviewComment"></div>
+          <button type="button" class="person-overview-contact-line" data-copy-contact="phone" id="personOverviewPhone"></button>
+          <button type="button" class="person-overview-contact-line" data-copy-contact="card" id="personOverviewCard"></button>
+          <button type="button" class="person-overview-contact-line" data-copy-contact="comment" id="personOverviewComment"></button>
         </div>
         <div class="person-history-list" id="personHistoryList"></div>
         <div class="dialog-actions person-overview-actions" id="personOverviewActions">
@@ -601,14 +597,14 @@
 
     <button class="icon-button" id="installButton" hidden>Установить</button>
     <button type="button" class="device-name-footer" id="deviceNameFooter" aria-label="Название устройства"></button>
-    <script src="server-config.js?v=208" onerror="window.__scriptFailed('server-config.js')"></script>
-    <script src="telegram-config.js?v=208" onerror="window.__scriptFailed('telegram-config.js')"></script>
-    <script src="firebase-config.js?v=208" onerror="window.__scriptFailed('firebase-config.js')"></script>
-    <script src="telegram-crypto.js?v=208" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
-    <script src="sync-merge.js?v=208" onerror="window.__scriptFailed('sync-merge.js')"></script>
-    <script src="sync.js?v=208" onerror="window.__scriptFailed('sync.js')"></script>
-    <script src="sync-telegram.js?v=208" onerror="window.__scriptFailed('sync-telegram.js')"></script>
-    <script src="sync-firebase.js?v=208" onerror="window.__scriptFailed('sync-firebase.js')"></script>
-    <script src="app.js?v=208" defer onerror="window.__scriptFailed('app.js')"></script>
+    <script src="server-config.js?v=214" onerror="window.__scriptFailed('server-config.js')"></script>
+    <script src="telegram-config.js?v=214" onerror="window.__scriptFailed('telegram-config.js')"></script>
+    <script src="firebase-config.js?v=214" onerror="window.__scriptFailed('firebase-config.js')"></script>
+    <script src="telegram-crypto.js?v=214" onerror="window.__scriptFailed('telegram-crypto.js')"></script>
+    <script src="sync-merge.js?v=214" onerror="window.__scriptFailed('sync-merge.js')"></script>
+    <script src="sync.js?v=214" onerror="window.__scriptFailed('sync.js')"></script>
+    <script src="sync-telegram.js?v=214" onerror="window.__scriptFailed('sync-telegram.js')"></script>
+    <script src="sync-firebase.js?v=214" onerror="window.__scriptFailed('sync-firebase.js')"></script>
+    <script src="app.js?v=214" defer onerror="window.__scriptFailed('app.js')"></script>
   </body>
 </html>
