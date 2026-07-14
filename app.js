@@ -32,10 +32,13 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "206";
+const APP_BUILD = "208";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
+const ACTIVE_FOLDER_IDS_KEY = "family-counter-active-folder-ids-local";
+const ACTIVE_FIRST_NAMES_KEY = "family-counter-active-first-names-local";
+const SINGLE_FILTER_MODE_KEY = "family-counter-single-filter-mode-local";
 
 const PERSON_BANK_THEMES = [
   { id: "", label: "Без банка", short: "—" },
@@ -52,6 +55,19 @@ const PERSON_BANK_THEMES = [
   { id: "psb", label: "ПСБ", short: "ПС" },
 ];
 const PERSON_BANK_THEME_IDS = new Set(PERSON_BANK_THEMES.map((item) => item.id));
+const BULK_BANK_ALIASES = {
+  ozon: ["озон", "ozon", "oz"],
+  yoomoney: ["юmoney", "юмани", "юм", "yoomoney"],
+  cupis: ["цупис", "цуп", "cupis", "цу"],
+  yandex: ["яндекс", "yandex", "я"],
+  wildberries: ["wildberries", "wb", "вб"],
+  sber: ["сбер", "sber"],
+  otp: ["отп", "otp"],
+  raif: ["райф", "raif", "raiff"],
+  tinkoff: ["тиньк", "тинькофф", "tinkoff", "t"],
+  alfa: ["альфа", "alfa", "a"],
+  psb: ["псб", "psb"],
+};
 const PERSON_DRAG_LONG_PRESS_MS = 1200;
 const PERSON_DRAG_MOVE_CANCEL_PX = 12;
 
@@ -859,7 +875,7 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
   state = dropRemoteOnlyGhosts(localBefore, normalizedRemote, state);
   state = preserveLocalBotFields(localBefore, state);
   state = applyDeletedPersonFilter(state);
-  state = preferLocalFiltersWhenShrunk(localBefore, normalizedRemote, state);
+  state = preserveLocalFiltersOnly(localBefore, state);
   state = scrubFiltersToPeople(state);
   state = applyDeletedFolderFilter(state);
   state = finalizePeopleAfterMerge(localBefore, normalizedRemote, state);
@@ -890,6 +906,8 @@ function applyRemoteState(remoteState, remoteVersion = 0) {
     }
   }
   reconcileFiltersAfterSync();
+  state = applyLocalFiltersToState(state);
+  persistLocalFiltersFromState();
   reconcileBotPendingFromRemote(normalizedRemote);
   tryConfirmCloudSync(state);
   render(true);
@@ -1101,14 +1119,70 @@ function scrubFiltersToPeople(appState) {
   };
 }
 
-function preferLocalFiltersWhenShrunk(localState, remoteState, mergedState) {
-  const localPeople = (localState.people || []).length;
-  const remotePeople = (remoteState.people || []).length;
-  const localFolders = (localState.folders || []).length;
-  const remoteFolders = (remoteState.folders || []).length;
-  const shouldPreferLocal = localPeople > 0
-    && (localPeople < remotePeople || localFolders < remoteFolders);
-  if (!shouldPreferLocal) return mergedState;
+function readLocalFiltersFromStorage() {
+  let activeFolderIds = [];
+  let activeFirstNames = [];
+  let singleFilterMode = false;
+  try {
+    const folders = localStorage.getItem(ACTIVE_FOLDER_IDS_KEY);
+    if (folders) activeFolderIds = JSON.parse(folders);
+    const names = localStorage.getItem(ACTIVE_FIRST_NAMES_KEY);
+    if (names) activeFirstNames = JSON.parse(names);
+    singleFilterMode = localStorage.getItem(SINGLE_FILTER_MODE_KEY) === "1";
+  } catch {
+    // ignore broken local filter storage
+  }
+  return {
+    activeFolderIds: Array.isArray(activeFolderIds) ? activeFolderIds : [],
+    activeFirstNames: Array.isArray(activeFirstNames) ? activeFirstNames : [],
+    singleFilterMode,
+  };
+}
+
+function writeLocalFiltersToStorage(filters) {
+  try {
+    localStorage.setItem(ACTIVE_FOLDER_IDS_KEY, JSON.stringify(filters.activeFolderIds || []));
+    localStorage.setItem(ACTIVE_FIRST_NAMES_KEY, JSON.stringify(filters.activeFirstNames || []));
+    localStorage.setItem(SINGLE_FILTER_MODE_KEY, filters.singleFilterMode ? "1" : "0");
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function migrateLocalFiltersFromState(appState) {
+  const hasLocal = localStorage.getItem(ACTIVE_FIRST_NAMES_KEY) != null
+    || localStorage.getItem(ACTIVE_FOLDER_IDS_KEY) != null;
+  if (hasLocal) return readLocalFiltersFromStorage();
+  const migrated = {
+    activeFolderIds: appState?.activeFolderIds || [],
+    activeFirstNames: appState?.activeFirstNames || [],
+    singleFilterMode: Boolean(appState?.singleFilterMode),
+  };
+  writeLocalFiltersToStorage(migrated);
+  return migrated;
+}
+
+function applyLocalFiltersToState(appState) {
+  const local = migrateLocalFiltersFromState(appState);
+  const names = new Set((appState.people || []).map((person) => getPersonFirstName(person)));
+  const folderIds = new Set((appState.folders || []).map((folder) => folder.id));
+  return {
+    ...appState,
+    activeFolderIds: (local.activeFolderIds || []).filter((id) => folderIds.has(id)),
+    activeFirstNames: (local.activeFirstNames || []).filter((name) => names.has(name)),
+    singleFilterMode: Boolean(local.singleFilterMode),
+  };
+}
+
+function persistLocalFiltersFromState() {
+  writeLocalFiltersToStorage({
+    activeFolderIds: state.activeFolderIds || [],
+    activeFirstNames: state.activeFirstNames || [],
+    singleFilterMode: Boolean(state.singleFilterMode),
+  });
+}
+
+function preserveLocalFiltersOnly(localState, mergedState) {
   const names = new Set((mergedState.people || []).map((person) => getPersonFirstName(person)));
   const folderIds = new Set((mergedState.folders || []).map((folder) => folder.id));
   return {
@@ -1882,6 +1956,7 @@ function reconcileFiltersAfterSync() {
   state.activeFolderIds = [];
   state.activeFirstNames = [];
   state.uiUpdatedAt = Date.now();
+  persistLocalFiltersFromState();
   filtersAutoCleared = true;
 }
 
@@ -1910,7 +1985,9 @@ function applyRemoteStateAsReplace(normalizedRemote, remoteVersion = 0) {
     localStorage.setItem(APPLIED_REMOTE_PULL_KEY, String(remoteVersion));
     localStorage.removeItem(LOCAL_PUSH_REVISION_KEY);
   }
+  state = applyLocalFiltersToState(state);
   reconcileFiltersAfterSync();
+  persistLocalFiltersFromState();
   reconcileBotPendingFromRemote(normalizedRemote);
   tryConfirmCloudSync(state);
   render(true);
@@ -2005,7 +2082,7 @@ function loadState() {
   const json = JSON.stringify(filtered);
   localStorage.setItem(STORAGE_KEY, json);
   localStorage.setItem(STORAGE_BACKUP_KEY, json);
-  return filtered;
+  return applyLocalFiltersToState(filtered);
 }
 
 function migrateDeletedPersonIds(appState) {
@@ -2148,6 +2225,9 @@ function sanitizeStateForCloud(appState) {
   if (!appState) return appState;
   return {
     ...appState,
+    activeFolderIds: [],
+    activeFirstNames: [],
+    singleFilterMode: false,
     people: (appState.people || []).map((person) => sanitizePersonForCloud(person)),
   };
 }
@@ -2500,6 +2580,7 @@ function applyManualBalanceCorrection(personId, personName, balance, at) {
 
 function saveState(options = {}) {
   syncBalancesFromHistory();
+  persistLocalFiltersFromState();
   state = ensureStateDataEpoch(state);
   if (!options.skipMetaTouch) {
     touchLastChangeMeta();
@@ -3024,6 +3105,7 @@ function renderPeopleList(container, detailed) {
     filtersAutoCleared = true;
     state.activeFolderIds = [];
     state.activeFirstNames = [];
+    persistLocalFiltersFromState();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(STORAGE_BACKUP_KEY, JSON.stringify(state));
     visiblePeople = getVisiblePeople();
@@ -4537,6 +4619,15 @@ function normalizeForMatch(str) {
     .trim();
 }
 
+function bulkQueryTokenMatchesPersonToken(queryToken, personToken) {
+  if (!queryToken || !personToken) return false;
+  if (personToken === queryToken) return true;
+  if (personToken.startsWith(queryToken) || queryToken.startsWith(personToken)) return true;
+  if (queryToken.length >= 3 && personToken.includes(queryToken)) return true;
+  if (personToken.length >= 3 && queryToken.includes(personToken)) return true;
+  return false;
+}
+
 function personSearchTokens(person) {
   const parts = [
     person.name,
@@ -4547,7 +4638,11 @@ function personSearchTokens(person) {
     person.profileNote,
   ];
   const tint = PERSON_BANK_THEMES.find((theme) => theme.id === person.cardTint);
-  if (tint && tint.id) parts.push(tint.label);
+  if (tint?.id) {
+    parts.push(tint.label, tint.short, tint.id);
+    const aliases = BULK_BANK_ALIASES[tint.id];
+    if (aliases) parts.push(...aliases);
+  }
   return normalizeForMatch(parts.filter(Boolean).join(" "))
     .split(/\s+/)
     .filter(Boolean);
@@ -4576,25 +4671,16 @@ function parseBulkLine(rawLine) {
 function matchPeopleForQuery(query) {
   const qTokens = normalizeForMatch(query).split(/\s+/).filter(Boolean);
   if (qTokens.length === 0) return [];
-  const scored = state.people
+  return state.people
     .map((person) => {
       const pTokens = personSearchTokens(person);
-      let score = 0;
-      qTokens.forEach((qt) => {
-        const hit = pTokens.some(
-          (pt) => pt === qt || pt.startsWith(qt) || qt.startsWith(pt) || pt.includes(qt),
-        );
-        if (hit) score += 1;
-      });
+      const score = qTokens.filter((qt) =>
+        pTokens.some((pt) => bulkQueryTokenMatchesPersonToken(qt, pt)),
+      ).length;
       return { person, score };
     })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || a.person.name.localeCompare(b.person.name));
-
-  // Показываем только тех, кто совпал по ВСЕМ словам (например «вик цуп»).
-  // Если полных совпадений нет — оставляем частичные, чтобы список не был пустым.
-  const fullMatches = scored.filter((entry) => entry.score === qTokens.length);
-  return fullMatches.length ? fullMatches : scored;
+    .filter((entry) => entry.score === qTokens.length)
+    .sort((a, b) => a.person.name.localeCompare(b.person.name));
 }
 
 function openBulkListView() {
