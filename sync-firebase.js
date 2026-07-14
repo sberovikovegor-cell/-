@@ -20,6 +20,7 @@
   let onRemoteUpdate = null;
   let onLocalStateMerged = null;
   let onBotExportRemote = null;
+  let onBotAckRemote = null;
   let onOnlineCallback = null;
   let onPushComplete = null;
   let onBeforeSyncedStatus = null;
@@ -134,6 +135,34 @@
     const code = getFamilyCode();
     const auth = cfg.authToken ? `?auth=${encodeURIComponent(cfg.authToken)}` : "";
     return `${dbUrl}/families/${encodeURIComponent(code)}.json${auth}`;
+  }
+
+  // Узел подтверждений от бота (families_ack/{code}) — открытый текст,
+  // содержит только id людей + номер слота (без ПДн), поэтому не шифруется.
+  function ackUrl() {
+    const code = getFamilyCode();
+    const auth = cfg.authToken ? `?auth=${encodeURIComponent(cfg.authToken)}` : "";
+    return `${dbUrl}/families_ack/${encodeURIComponent(code)}.json${auth}`;
+  }
+
+  async function pullBotAck() {
+    if (!isSyncReady() || !isNetworkAvailable()) return false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    let node;
+    try {
+      const res = await fetch(ackUrl(), { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      node = await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+    if (node && onBotAckRemote) onBotAckRemote(node);
+    return Boolean(node);
+  }
+
+  function pullBotAckNow() {
+    return pullBotAck().catch(() => false);
   }
 
   // ── шифрование ──
@@ -349,6 +378,7 @@
         clearTimeout(streamDebounce);
         streamDebounce = setTimeout(() => {
           if (!isSyncReady() || !isNetworkAvailable()) return;
+          pullBotAck().catch(() => {});
           pullFromFirebase()
             .then((r) => {
               if (r?.applied || (r?.ok && !hasLocalUnsyncedEdits())) safeSyncedStatus("Синхронизировано");
@@ -374,6 +404,7 @@
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(() => {
       if (!isNetworkAvailable() || !isSyncReady()) return;
+      pullBotAck().catch(() => {});
       if (hasLocalUnsyncedEdits()) {
         attemptSelfPush(false);
         return;
@@ -396,6 +427,7 @@
     onRemoteUpdate = callback;
     updateSyncStatus("online", "Подключение к Firebase…");
 
+    pullBotAck().catch(() => {});
     pullFromFirebase()
       .catch((error) => console.warn("firebase initial pull", error))
       .finally(() => {
@@ -467,12 +499,14 @@
     pushBotExport,
     pushWithBotExport,
     pullNow,
+    pullBotAckNow,
     stopPendingBotPoll,
     notifyBotExportPending,
     markLocalEditPending,
     updateSyncStatus,
     set onLocalStateMerged(fn) { onLocalStateMerged = fn; },
     set onBotExportRemote(fn) { onBotExportRemote = fn; },
+    set onBotAckRemote(fn) { onBotAckRemote = fn; },
     set onOnline(fn) { onOnlineCallback = fn; },
     set onPushComplete(fn) { onPushComplete = fn; },
     set onBeforeSyncedStatus(fn) { onBeforeSyncedStatus = fn; },
