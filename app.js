@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "205";
+const APP_BUILD = "206";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -2958,8 +2958,8 @@ function buildPersonCard(person, stats, detailed) {
     ? ""
     : `
       <div class="person-top-actions">
-        <button class="mini action" type="button" data-action="operation">Действие</button>
         <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
+        <button class="mini action" type="button" data-action="operation">Действие</button>
       </div>`;
   const detailsBlock = detailed
     ? `
