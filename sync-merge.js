@@ -408,18 +408,8 @@
     botGroupId = botGroupId != null && botGroupId !== "" ? Number(botGroupId) : null;
     if (!Number.isFinite(botGroupId)) botGroupId = null;
 
-    const remoteActive = (remoteState?.activeFolderIds || []).filter((id) => folderIds.has(id));
     const localActive = (localState?.activeFolderIds || []).filter((id) => folderIds.has(id));
     const localNames = (localState?.activeFirstNames || []).filter((name) => peopleFirstNames.has(name));
-    const remoteNames = (remoteState?.activeFirstNames || []).filter((name) => peopleFirstNames.has(name));
-
-    const activeFolderIds = remoteUi > localUi
-      ? (remoteActive.length ? remoteActive : localActive)
-      : localActive;
-
-    const activeFirstNames = remoteUi > localUi
-      ? (remoteNames.length ? remoteNames : localNames)
-      : localNames;
 
     if (deletedPersonSet.size) {
       people = people.filter((person) => !deletedPersonSet.has(person.id));
@@ -438,11 +428,9 @@
       historyMonths,
       historyClearedAtMs,
       folders,
-      activeFolderIds,
-      activeFirstNames,
-      singleFilterMode: remoteUi >= localUi
-        ? Boolean(remoteState?.singleFilterMode)
-        : Boolean(localState?.singleFilterMode),
+      activeFolderIds: localActive,
+      activeFirstNames: localNames,
+      singleFilterMode: Boolean(localState?.singleFilterMode),
       botGroupId,
       uiUpdatedAt: Math.max(localUi, remoteUi),
       peopleOrderUpdatedAt: Math.max(localOrderAt, remoteOrderAt),
