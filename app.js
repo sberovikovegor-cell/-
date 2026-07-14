@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "215";
+const APP_BUILD = "216";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -252,7 +252,23 @@ function isBenignAsyncError(reason) {
 
 function hideBootScreen() {
   const screen = document.querySelector("#bootErrorScreen");
-  if (screen) screen.classList.add("boot-error-screen--hidden");
+  if (!screen) return;
+  screen.classList.add("boot-error-screen--hidden");
+  screen.classList.remove("boot-error-screen--error");
+  screen.classList.remove("boot-error-screen--loading");
+}
+
+function reportOptionalScriptErrors() {
+  const failed = window.__optionalScriptErrors || [];
+  if (!failed.length || !elements.syncStatus) return;
+  const names = failed.join(", ");
+  if (window.FAMILY_TELEGRAM_CONFIG?.enabled && failed.includes("sync-telegram.js")) {
+    elements.syncStatus.dataset.status = "error";
+    elements.syncStatus.textContent = `Нет sync-telegram.js — залейте файл на сайт`;
+    return;
+  }
+  elements.syncStatus.dataset.status = "offline";
+  elements.syncStatus.textContent = `Не загрузились: ${names}`;
 }
 
 window.addEventListener("error", (event) => {
@@ -501,6 +517,7 @@ function init() {
     }
     render(true);
     registerServiceWorker();
+    reportOptionalScriptErrors();
     hideBootScreen();
   } catch (error) {
     console.error(error);
