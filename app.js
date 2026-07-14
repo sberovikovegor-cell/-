@@ -32,7 +32,7 @@ const PERSON_DRAFT_KEY = "family-counter-person-draft-local";
 const STARTUP_PUSH_DONE_KEY = "family-counter-startup-push-done";
 const CLOUD_CONFIRM_FP_KEY = "family-counter-cloud-confirm-fp";
 const APPLIED_REMOTE_PULL_KEY = "family-counter-applied-remote-pull";
-const APP_BUILD = "203";
+const APP_BUILD = "205";
 const PEOPLE_SORT_KEY = "family-counter-people-sort";
 const PEOPLE_BALANCE_MIN_KEY = "family-counter-people-balance-min";
 const PEOPLE_BALANCE_MAX_KEY = "family-counter-people-balance-max";
@@ -355,16 +355,15 @@ const elements = {
   operationDialog: document.querySelector("#operationDialog"),
   operationForm: document.querySelector("#operationForm"),
   operationPerson: document.querySelector("#operationPerson"),
-  operationTitle: document.querySelector("#operationTitle"),
+  operationBalanceInput: document.querySelector("#operationBalanceInput"),
   operationStatsTop: document.querySelector("#operationStatsTop"),
+  operationHistoryList: document.querySelector("#operationHistoryList"),
   selectedAmountInput: document.querySelector("#selectedAmountInput"),
   transferToggleRow: document.querySelector("#transferToggleRow"),
   transferCheckbox: document.querySelector("#transferCheckbox"),
   noteInput: document.querySelector("#noteInput"),
-  resetAmountButton: document.querySelector("#resetAmountButton"),
   confirmOperationButton: document.querySelector("#confirmOperationButton"),
   cancelOperationButton: document.querySelector("#cancelOperationButton"),
-  exitOperationButton: document.querySelector("#exitOperationButton"),
   installButton: document.querySelector("#installButton"),
   emptyStateTemplate: document.querySelector("#emptyStateTemplate"),
   botPendingBanner: document.querySelector("#botPendingBanner"),
@@ -1686,12 +1685,22 @@ function bindEvents() {
   elements.operationForm.addEventListener("submit", (event) => event.preventDefault());
   elements.operationForm.addEventListener("click", handleOperationActionClick);
   elements.cancelOperationButton.addEventListener("click", closeOperationDialog);
-  elements.exitOperationButton.addEventListener("click", closeOperationDialog);
+  if (elements.operationHistoryList) {
+    elements.operationHistoryList.addEventListener("click", handleHistoryClick);
+  }
+  if (elements.operationBalanceInput) {
+    elements.operationBalanceInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        elements.operationBalanceInput.blur();
+      }
+    });
+    elements.operationBalanceInput.addEventListener("blur", applyOperationBalanceFromInput);
+  }
   if (elements.selectedAmountInput) {
     elements.selectedAmountInput.addEventListener("input", handleAmountInputChange);
     elements.selectedAmountInput.addEventListener("keydown", handleAmountInputKeydown);
   }
-  elements.resetAmountButton.addEventListener("click", clearAmountAll);
 
   if (elements.peopleSortSelect) {
     elements.peopleSortSelect.value = peopleSortMode;
@@ -2628,6 +2637,7 @@ function render(force = false) {
   renderHistory();
   renderDeviceNameFooter();
   refreshPersonHistoryDialogIfOpen();
+  refreshOperationDialogIfOpen();
 }
 
 function renderHistoryTotals() {
@@ -2745,6 +2755,23 @@ function clearPersonDraft() {
     localStorage.removeItem(PERSON_DRAFT_KEY);
   } catch {
     // ignore
+  }
+}
+
+function resetPersonFormFields() {
+  elements.personFirstNameInput.value = "";
+  elements.personLastNameInput.value = "";
+  elements.personBalanceInput.value = "";
+  elements.personPhoneInput.value = "";
+  elements.personCardNumberInput.value = "";
+  elements.personCardDetailsInput.value = "";
+  elements.personProfileNoteInput.value = "";
+  if (elements.personUseInBotCheckbox) elements.personUseInBotCheckbox.checked = false;
+  renderCardTintPicker("");
+  renderFolderPicker([]);
+  if (elements.personPositionInput) {
+    elements.personPositionInput.value = String(state.people.length + 1);
+    elements.personPositionInput.max = String(Math.max(1, state.people.length + 1));
   }
 }
 
@@ -2930,8 +2957,9 @@ function buildPersonCard(person, stats, detailed) {
   const topActionsHtml = detailed
     ? ""
     : `
-      <div class="person-top-actions person-top-actions-single">
+      <div class="person-top-actions">
         <button class="mini action" type="button" data-action="operation">Действие</button>
+        <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
       </div>`;
   const detailsBlock = detailed
     ? `
@@ -2979,7 +3007,6 @@ function buildPersonCard(person, stats, detailed) {
       <div class="person-line person-line-balance">
         <button type="button" class="person-balance money-chip" data-action="overview" aria-label="Баланс и история"></button>
         <button type="button" class="last-income money-chip" data-action="last-income-info" aria-label="Последнее пополнение"></button>
-        <button class="bot-toggle" type="button" data-action="bot-toggle" aria-label="Использовать в боте"></button>
       </div>
       ${topActionsHtml}
       <div class="person-line person-line-stats">
@@ -5121,8 +5148,8 @@ function openPersonView() {
   try { window.scrollTo({ top: 0 }); } catch { /* noop */ }
 }
 
-function closePersonView() {
-  if (!editingPersonId) savePersonDraft();
+function closePersonView(options = {}) {
+  if (!editingPersonId && !options.skipDraftSave) savePersonDraft();
   if (activeView !== "person") {
     activeView = "main";
     updateViewMode();
@@ -5281,8 +5308,12 @@ function savePerson(event) {
   }
 
   saveState({ immediatePush: true });
-  if (!editingPersonId) clearPersonDraft();
-  closePersonView();
+  const wasNewPerson = !editingPersonId;
+  if (wasNewPerson) {
+    clearPersonDraft();
+    resetPersonFormFields();
+  }
+  closePersonView({ skipDraftSave: wasNewPerson });
   render(true);
 
   const saved = editingPersonId
@@ -5459,18 +5490,16 @@ function openOperationDialog(person) {
     amount: 0,
   };
 
-  const stats = getPersonStats(person);
-  const statsParts = formatPersonPurchaseStatsParts(stats);
-  if (elements.operationTitle) elements.operationTitle.textContent = formatMoney(person.balance);
-  if (elements.operationPerson) elements.operationPerson.textContent = person.name;
-  if (elements.operationStatsTop) elements.operationStatsTop.innerHTML = statsParts.mainHtml;
+  refreshOperationDialog(person);
   elements.operationForm?.classList.remove("has-amount");
   elements.operationDialog.classList.remove("is-income");
   if (elements.transferCheckbox) elements.transferCheckbox.checked = false;
   elements.noteInput.value = "";
   amountEntryText = "";
   updateSelectedAmount(0);
-  openAppDialog(elements.operationDialog, { initialFocus: elements.selectedAmountInput });
+  // Без autofocus — клавиатура только по нажатию на поле ввода.
+  openAppDialog(elements.operationDialog);
+  blurActiveInput();
 }
 
 function closeOperationDialog() {
@@ -5479,10 +5508,10 @@ function closeOperationDialog() {
   closeAppDialog(elements.operationDialog);
 }
 
-function clearAmountAll() {
+function clearAmountAll(options = {}) {
   amountEntryText = "";
   updateSelectedAmount(0);
-  if (elements.selectedAmountInput) {
+  if (!options.skipFocus && elements.selectedAmountInput) {
     elements.selectedAmountInput.focus();
   }
 }
@@ -5495,6 +5524,104 @@ function updateSelectedAmount(amount) {
     elements.selectedAmountInput.value = amount > 0 ? amountEntryText : "";
   }
   setOperationButtonsEnabled(amount > 0);
+}
+
+function renderOperationHistoryList(personId) {
+  const container = elements.operationHistoryList;
+  if (!container) return;
+  const person = state.people.find((item) => item.id === personId);
+  const rows = state.history
+    .filter((item) => item.personId === personId)
+    .sort((a, b) => b.createdAt - a.createdAt);
+  container.innerHTML = "";
+  if (rows.length === 0) {
+    container.append(createEmptyState("Истории пока нет", "Операции появятся после подтверждения."));
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  rows.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "history-item";
+    row.dataset.historyId = item.id;
+    const isBalanceSet = item.type === "balance_set";
+    const sign = isBalanceSet ? "=" : (item.direction === "plus" ? "+" : "-");
+    const amountText = isBalanceSet ? formatMoney(item.balanceAfter) : formatMoney(item.amount);
+
+    const main = document.createElement("div");
+    main.className = "history-row-main";
+    const typeEl = document.createElement("span");
+    typeEl.className = "history-name";
+    typeEl.textContent = historyTypeLabel(item.type);
+    const amountEl = document.createElement("span");
+    amountEl.className = `history-amount ${item.type}`;
+    amountEl.textContent = `${sign}${amountText}`;
+    main.append(typeEl, amountEl);
+
+    const sub = document.createElement("div");
+    sub.className = "history-row-sub";
+    const dateEl = document.createElement("span");
+    dateEl.textContent = formatDate(item.createdAt);
+    sub.append(dateEl);
+    const deviceLabel = getDeviceLabel(item.deviceId);
+    if (deviceLabel) {
+      const deviceEl = document.createElement("span");
+      deviceEl.className = "history-device";
+      deviceEl.textContent = deviceLabel;
+      sub.append(deviceEl);
+    }
+
+    row.append(main, sub);
+    if (item.note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "history-row-note";
+      noteEl.textContent = item.note;
+      row.append(noteEl);
+    }
+    fragment.append(row);
+  });
+  container.append(fragment);
+}
+
+function refreshOperationDialog(person) {
+  if (!person || !currentOperation) return;
+  const stats = getPersonStats(person);
+  const statsParts = formatPersonPurchaseStatsParts(stats);
+  if (elements.operationBalanceInput) {
+    elements.operationBalanceInput.value = formatMoney(person.balance);
+  }
+  if (elements.operationPerson) elements.operationPerson.textContent = person.name;
+  if (elements.operationStatsTop) elements.operationStatsTop.innerHTML = statsParts.mainHtml;
+  renderOperationHistoryList(person.id);
+}
+
+function refreshOperationDialogIfOpen() {
+  if (!elements.operationDialog?.open || !currentOperation) return;
+  const person = state.people.find((item) => item.id === currentOperation.personId);
+  if (person) refreshOperationDialog(person);
+}
+
+function applyOperationBalanceFromInput() {
+  if (!currentOperation || !elements.operationBalanceInput) return;
+  const person = state.people.find((item) => item.id === currentOperation.personId);
+  if (!person) return;
+  const newBalance = parseAmount(elements.operationBalanceInput.value);
+  if (newBalance < 0) {
+    elements.operationBalanceInput.value = formatMoney(person.balance);
+    return;
+  }
+  if (newBalance === Number(person.balance || 0)) return;
+
+  const idx = state.people.findIndex((item) => item.id === person.id);
+  if (idx < 0) return;
+  const now = Date.now();
+  state.people[idx].balance = newBalance;
+  state.people[idx] = touchPersonBalanceField(state.people[idx], now);
+  delete state.people[idx].balanceManualAt;
+  applyManualBalanceCorrection(person.id, person.name, newBalance, now);
+  markLocalEditPending();
+  saveState({ immediatePush: true });
+  refreshOperationDialog(state.people[idx]);
+  render(true);
 }
 
 function performOperation(type) {
@@ -5528,9 +5655,17 @@ function performOperation(type) {
   });
 
   saveState({ immediatePush: true });
-  currentOperation = null;
-  closeAppDialog(elements.operationDialog);
-  render();
+  markLocalEditPending();
+
+  const personId = currentOperation.personId;
+  elements.noteInput.value = "";
+  amountEntryText = "";
+  updateSelectedAmount(0);
+  if (elements.selectedAmountInput) elements.selectedAmountInput.blur();
+
+  const updatedPerson = state.people.find((item) => item.id === personId);
+  if (updatedPerson) refreshOperationDialog(updatedPerson);
+  render(true);
 }
 
 function clearActiveHistory() {
